@@ -350,4 +350,183 @@ head(climate_ptl_province_summary[order(p_eff, decreasing = FALSE)], 10)
 
 
 
+climate_model_formula <- CASES ~ 1 +   f(MONTH, replicate = PROV_IND, model = "rw1", cyclic = TRUE,
+                                    constr = TRUE, scale.model = TRUE, hyper = prior.prec) +
+  f(YEAR, replicate = PROV_IND, model = "iid") + 
+  f(PROV_IND,
+    model = "bym2", hyper = prior.prec, scale.model = TRUE, 
+    graph = file.path(peru.province.inla.data.in.dir,
+                      "nbr_piura_tumbes_lambayeque.graph")) +
+  SQ_RSI_DIR_LAG+SEASON+
+  ns(MODIFIED_DIFF_WITH_HISTORICAL_DIR_LAG, df = 4) +
+  tmin_roll_2_basis + prec_roll_2_basis + icen_basis + spi_basis
+
+run_province_model_func <- function(data, formula = default_pois_formula){
+  setkeyv(data, c("TIME", "PROVINCE"))
+  model <- inla(formula = formula, 
+                data = data, family = "zeroinflatedpoisson0", offset = log(POP_OFFSET),
+                verbose = FALSE,
+                control.inla = list(strategy = 'adaptive',
+                                    cmin = 0), 
+                control.family = list(link = "log"),
+                control.compute = list(waic = TRUE, dic = TRUE, 
+                                       cpo = TRUE, config = TRUE,
+                                       return.marginals = TRUE),
+                control.fixed = list(correlation.matrix = TRUE, 
+                                     prec.intercept = 1, prec = 1),
+                control.predictor = list(link = 1, compute = TRUE)       
+  )
+  model <- inla.rerun(model)
+  return(model)
+}
+climate_province_fit_38 <- run_province_model_func(data = ptl_province_inla_df, climate_model_formula)
+
+climate_province_fit_38_dlnm_func <- function(){
+  coef <- climate_province_fit_38$summary.fixed$mean
+  vcov <- climate_province_fit_38$misc$lincomb.derived.covariance.matrix
+  indt <- grep("tmin_roll_2_basis", climate_province_fit_38$names.fixed)
+  
+  # extract predictions from the tmin_roll_2 DLNM centred on overall mean tmin_roll_2
+  predt <- crosspred(tmin_roll_2_basis, coef = coef[indt], vcov=vcov[indt,indt],
+                     model.link = "log", bylag = 0.5, cen = mean(ptl_province_inla_df$tmin_roll_2),
+                     by = 0.5) 
+  rr <- (predt$matRRfit)
+  rr.lci <- (predt$matRRlow)
+  rr.uci <- (predt$matRRhigh)
+  max_index <- which(rr == max(rr), arr.ind = TRUE)
+  y <- predt$predvar
+  length(y)
+  x <- seq(0, 3, 0.5)
+  length(x)
+  z <- t(log(predt$matRRfit))
+  col_val <- max(abs(z))
+  pal <- rev(brewer.pal(11, "PRGn"))
+  levels <- seq(-3, 3, by = 0.2)
+  col1 <- colorRampPalette(pal[1:6])
+  
+  col2 <- colorRampPalette(pal[6:11])
+  cols <- c(col1(sum(levels < 0)), col2(sum(levels > 0)))
+  
+  #Insert pdf() here
+  filled.contour(x,y,z,
+                 plot.title = title(main = "Minimum Temperature", cex.lab = 1.25,
+                                    xlab = "Lag (months)", 
+                                    ylab = expression(paste("Minimum Temperature (",degree,"C)"))),
+                 col = cols,levels = levels,
+                 plot.axes = { axis(1, at = 0:4, c(0:4),
+                                    cex.axis = 1.25) 
+                   axis(2, cex.axis = 1.25)},
+                 key.title = title(main = "log(RR)", cex = 3),
+                 cex.lab = 3,
+                 cex.axis = 3)
+  
+  
+  indt <- grep("prec_roll_2_basis", climate_province_fit_38$names.fixed)
+  
+  # extract predictions from the prec_roll_2 DLNM centred on overall mean prec_roll_2
+  predt <- crosspred(prec_roll_2_basis, coef = coef[indt], vcov=vcov[indt,indt],
+                     model.link = "log", bylag = 0.5, cen = (mean(ptl_province_inla_df$prec_roll_2)),
+                     by = 25) 
+  rr <- predt$matRRfit
+
+  rr.lci <- predt$matRRlow
+  rr.uci <- predt$matRRhigh
+  max_index <- which(rr == max(rr), arr.ind = TRUE)
+  y <- predt$predvar
+  x <- seq(0, 2, 0.5)
+  z <- t(log(predt$matRRfit))
+  col_val <- max(abs(z))
+  pal <- rev(brewer.pal(11, "PRGn"))
+  levels <- seq(-3, 3, by = 0.2)
+  col1 <- colorRampPalette(pal[1:6])
+  
+  col2 <- colorRampPalette(pal[6:11])
+  cols <- c(col1(sum(levels < 0)), col2(sum(levels > 0)))
+  
+  filled.contour(x,y,z,
+                 col = cols,levels = levels,
+                 plot.axes = { axis(1, at = 0:6, c(0:6), cex.axis = 1.25) 
+                   axis(2, cex.axis = 1.25)},
+                 key.title = title(main = "log(RR)", cex = 1.1),
+                 cex.lab = 1.1, plot.title = title(main = "Monthly precipitation", cex.lab = 1.25,
+                                                   xlab = "Lag (months)", ylab = expression(paste("Precipitation (mm)"))))
+  
+  indt <- grep("spi_basis", climate_province_fit_38$names.fixed)
+  
+  # extract predictions from the icen DLNM centred on overall mean icen (19 deg C)
+  predt <- crosspred(spi_basis, coef = coef[indt], vcov=vcov[indt,indt],
+                     model.link = "log", bylag = 0.5, cen = mean(ptl_province_inla_df$SPI_6) )
+  rr <- predt$matRRfit
+  rr.lci <- predt$matRRlow
+  rr.uci <- predt$matRRhigh
+  max_index <- which(rr == max(rr), arr.ind = TRUE)
+
+  min_index <- which(rr == min(rr), arr.ind = TRUE)
+
+  # contour and scenario plots for icen (Main text Fig 3)
+  
+  # contour plot of exposure-lag-response associations (Main text Fig 3a)
+  # pdf("figs/fig_03a_icen_contour.pdf", width = 6.5, height = 6)
+  
+  y <- predt$predvar
+  x <- seq(0, 2, 0.5)
+  z <- t(log(predt$matRRfit))
+  pal <- rev(brewer.pal(11, "PRGn"))
+  levels <- seq(-3, 3, by = 0.2)
+  col1 <- colorRampPalette(pal[1:6])
+  
+  col2 <- colorRampPalette(pal[6:11])
+  cols <- c(col1(sum(levels < 0)), col2(sum(levels > 0)))
+  
+  # pdf(file.path(peru.province.inla.data.out.dir, "icen.pdf"), h = 10, w = 14)
+  
+  filled.contour(x,y,z,
+                 plot.title = title(main = "Standardised Precipitation Index", cex.lab = 1.25,
+                                    xlab = "Lag (months)", 
+                                    ylab = "SPI-6"),
+                 col = cols,levels = levels,
+                 plot.axes = { axis(1, at = 0:4, c(0:4),
+                                    cex.axis = 1.25) 
+                   axis(2, cex.axis = 1.25)},
+                 key.title = title(main = "log(RR)", cex = 3),
+                 cex.lab = 3,
+                 cex.axis = 3)
+  
+  
+  
+  indt <- grep("icen_basis", climate_province_fit_38$names.fixed)
+  # extract predictions from the icen DLNM centred on overall mean icen
+  predt <- crosspred(icen_basis, coef = coef[indt], vcov=vcov[indt,indt],
+                     model.link = "log", bylag = 0.5, cen = mean(ptl_province_inla_df$E_INDEX)) 
+  rr <- predt$matRRfit
+  rr.lci <- predt$matRRlow
+  rr.uci <- predt$matRRhigh
+  max_index <- which(rr == max(rr), arr.ind = TRUE)
+  
+
+  y <- predt$predvar
+  x <- seq(0, 4, 0.5)
+  z <- t(log(predt$matRRfit))
+  pal <- rev(brewer.pal(11, "PRGn"))
+  levels <- seq(-3, 3, by = 0.2)
+  col1 <- colorRampPalette(pal[1:6])
+  
+  col2 <- colorRampPalette(pal[6:11])
+  cols <- c(col1(sum(levels < 0)), col2(sum(levels > 0)))
+
+  filled.contour(x,y,z,
+                 plot.title = title(main = "ICEN", cex.lab = 1.25,
+                                    xlab = "Lag (months)", 
+                                    ylab = "ICEN E-Index"),
+                 col = cols,levels = levels,
+                 plot.axes = { axis(1, at = 0:4, c(0:4),
+                                    cex.axis = 1.25) 
+                   axis(2, cex.axis = 1.25)},
+                 key.title = title(main = "log(RR)", cex = 3),
+                 cex.lab = 3,
+                 cex.axis = 3)
+  #Uncomment this below when using pdf() above
+  #dev.off()
+}
+
 
