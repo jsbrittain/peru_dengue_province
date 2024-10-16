@@ -453,7 +453,7 @@ climate_province_fit_38_dlnm_func <- function(){
   
   indt <- grep("spi_basis", climate_province_fit_38$names.fixed)
   
-  # extract predictions from the icen DLNM centred on overall mean icen (19 deg C)
+  # extract predictions from the SPI DLNM centred on overall mean SPI 
   predt <- crosspred(spi_basis, coef = coef[indt], vcov=vcov[indt,indt],
                      model.link = "log", bylag = 0.5, cen = mean(ptl_province_inla_df$SPI_6) )
   rr <- predt$matRRfit
@@ -463,11 +463,7 @@ climate_province_fit_38_dlnm_func <- function(){
 
   min_index <- which(rr == min(rr), arr.ind = TRUE)
 
-  # contour and scenario plots for icen (Main text Fig 3)
-  
-  # contour plot of exposure-lag-response associations (Main text Fig 3a)
-  # pdf("figs/fig_03a_icen_contour.pdf", width = 6.5, height = 6)
-  
+
   y <- predt$predvar
   x <- seq(0, 2, 0.5)
   z <- t(log(predt$matRRfit))
@@ -477,9 +473,7 @@ climate_province_fit_38_dlnm_func <- function(){
   
   col2 <- colorRampPalette(pal[6:11])
   cols <- c(col1(sum(levels < 0)), col2(sum(levels > 0)))
-  
-  # pdf(file.path(peru.province.inla.data.out.dir, "icen.pdf"), h = 10, w = 14)
-  
+
   filled.contour(x,y,z,
                  plot.title = title(main = "Standardised Precipitation Index", cex.lab = 1.25,
                                     xlab = "Lag (months)", 
@@ -528,5 +522,4 @@ climate_province_fit_38_dlnm_func <- function(){
   #Uncomment this below when using pdf() above
   #dev.off()
 }
-
 
