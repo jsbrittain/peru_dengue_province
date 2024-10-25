@@ -2,7 +2,7 @@
 
 
 #READ IN RAW CASES ----
-raw_peru_cases <- data.table(read.csv(file.path(peru.case_data.in.dir, "2010_2019_cases_full_data.csv")))
+raw_peru_cases <- data.table(read.csv(file.path(peru.case_data.in.dir, "2010_2021_cases_full_data.csv")))
 
 #Probable vs Confirmed Analysis----
 department_probable_confirmed_cases <- raw_peru_cases[, list(TOTAL_CASES = length(Sexo)), by = c("Provincia","Departamnento","Semana", "Ano", "Tipo.de.diagnóstico")]
