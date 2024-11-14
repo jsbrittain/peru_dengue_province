@@ -5,6 +5,7 @@
 raw_peru_cases <- data.table(read.csv(file.path(peru.case_data.in.dir, "2010_2021_cases_full_data.csv")))
 
 #Probable vs Confirmed Analysis----
+
 department_probable_confirmed_cases <- raw_peru_cases[, list(TOTAL_CASES = length(Sexo)), by = c("Provincia","Departamnento","Semana", "Ano", "Tipo.de.diagnóstico")]
 setnames(department_probable_confirmed_cases, colnames(department_probable_confirmed_cases), c("PROVINCE","REGION","WEEK", "YEAR", "CASE_TYPE","TOTAL_CASES"))
 department_probable_confirmed_cases[, PROVINCE:= str_to_title(PROVINCE)]
@@ -34,20 +35,24 @@ filled_dt[, YEAR_WEEK:= paste0(YEAR, "-W", WEEK, "-1")]
 filled_dt[which(WEEK < 10), YEAR_WEEK:= paste0(YEAR, "-W0", WEEK, "-1")]
 filled_dt[, REPORTED_DATE:= ISOweek2date(filled_dt$YEAR_WEEK)]
 filled_dt[, MONTH:= substr(REPORTED_DATE, 1, 7)]
-
+filled_dt
 
 #Create Monthly dt
 monthly_department_probable_confirmed_cases <- filled_dt %>%
   group_by(PROVINCE, MONTH, CASE_TYPE) %>%
   summarize(ym_cases = sum(TOTAL_CASES, na.rm = TRUE))
+monthly_department_probable_confirmed_cases <-
+  filled_dt[, list(ym_cases = sum(TOTAL_CASES,
+                                  na.rm = TRUE)), by = c("PROVINCE", "MONTH", "CASE_TYPE")]
 monthly_department_probable_confirmed_cases <- as.data.table(monthly_department_probable_confirmed_cases)
+
 monthly_department_probable_confirmed_cases[, m:=  substr(MONTH, nchar(MONTH) - 1, nchar(MONTH))]
 monthly_department_probable_confirmed_cases[, YEAR:= substr(MONTH, 1, 4)]
 monthly_department_probable_confirmed_cases[, m:= as.numeric(m)]
 monthly_department_probable_confirmed_cases[, MONTH:= NULL]
 setnames(monthly_department_probable_confirmed_cases, "m", "MONTH")
 monthly_department_probable_confirmed_cases[, YEAR:= as.numeric(YEAR)]
-
+monthly_department_probable_confirmed_cases
 #Merge in total collapsed (confirmed+reported) cases
 tmp <- 
   monthly_department_probable_confirmed_cases[, list(TOTAL_CASES = sum(ym_cases)),
@@ -64,7 +69,7 @@ monthly_department_probable_confirmed_cases <- merge(monthly_department_probable
                                                      by = c("MONTH", "PROVINCE", "YEAR"))
 monthly_department_probable_confirmed_cases[which(TOTAL_CASES != 0), PROPN_CONFIRMED:= CONFIRMED/TOTAL_CASES]
 monthly_department_probable_confirmed_cases[which(TOTAL_CASES == 0), PROPN_CONFIRMED:= 0]
-
+monthly_department_probable_confirmed_cases
 
 
 
@@ -78,24 +83,25 @@ monthly_department_probable_confirmed_cases[which(TOTAL_CASES == 0), PROPN_CONFI
 
 #Collapsing probable + confirmed ----
 district_peru_cases <- raw_peru_cases[, list(TOTAL_CASES = length(Sexo)), by = c("Distrito" , "Provincia" ,"Departamnento","Semana", "Ano")]
-district_peru_cases[which(PROVINCE == "Sanchez Carrion" & TOTAL_CASES > 0)]
+district_peru_cases
 setnames(district_peru_cases, colnames(district_peru_cases), c("DISTRICT", "PROVINCE","REGION","WEEK", "YEAR", "TOTAL_CASES"))
 district_peru_cases[, PROVINCE:= str_to_title(PROVINCE)]
 district_peru_cases[, DISTRICT:= str_to_title(DISTRICT)]
 district_peru_cases[, REGION:= str_to_title(REGION)]
-district_peru_cases[which(PROVINCE == "Tumbes" & WEEK == 4 & YEAR == 2018), ]
 
-missing_regions_from_cases <- unique(district_peru_cases$REGION)[which(!(unique(district_peru_cases$REGION) %in% spatial_adm_boundaries$ADM1_ES))]
+missing_regions_from_cases <- unique(district_peru_cases$REGION)[which(!(unique(district_peru_cases$REGION) %in% peru_district_boundaries2$ADM1_ES))]
+missing_regions_from_cases
 district_peru_cases[which(REGION == "Madre De Dios"), REGION:= "Madre de Dios"]
-district_peru_cases[which(REGION == "San Martin"), REGION:= "San Martín"]
-district_peru_cases[which(REGION == "Junin"), REGION:= "Junín"]
-district_peru_cases[which(REGION == "Huanuco"), REGION:= "Huánuco"]
+# district_peru_cases[which(REGION == "San Martin"), REGION:= "San Martín"]
+# district_peru_cases[which(REGION == "Junin"), REGION:= "Junín"]
+# district_peru_cases[which(REGION == "Huanuco"), REGION:= "Huánuco"]
 
 
 
 
 
 province_peru_cases <- district_peru_cases[, list(TOTAL_CASES = sum(TOTAL_CASES)), by = c("PROVINCE","WEEK", "YEAR")]
+province_peru_cases
 setkeyv(province_peru_cases, c("PROVINCE", "YEAR", "WEEK"))
 province_peru_cases <- province_peru_cases[which(PROVINCE!= "")]
 province_peru_cases
@@ -113,24 +119,33 @@ filled_dt[, YEAR_WEEK:= paste0(YEAR, "-W", WEEK, "-1")]
 filled_dt[which(WEEK < 10), YEAR_WEEK:= paste0(YEAR, "-W0", WEEK, "-1")]
 filled_dt[, REPORTED_DATE:= ISOweek2date(filled_dt$YEAR_WEEK)]
 filled_dt[, MONTH:= substr(REPORTED_DATE, 1, 7)]
-
+filled_dt
 #Set up region-province dt (for future repeated usage)
-setkeyv(filled_dt, c("PROVINCE", "REGION"))
-region_province <- unique(subset(filled_dt, select = c("PROVINCE", "REGION")))
 
-#Set up Piura-Tumbes-Lambayeque province names data.table
+district_peru_cases$REGION
+region_province <- unique(subset(district_peru_cases, select = c("PROVINCE", "REGION")))
+region_province
+
+#Set up Piura-Tumbes-Lambayeque province-region names data.table
 ptl_region_province <- subset(region_province, 
                               REGION %in% piura_tumbes_lambayeque)
+ptl_region_province
+filled_dt <- subset(filled_dt, PROVINCE %in% ptl_region_province$PROVINCE)
+filled_dt <- merge(filled_dt, ptl_region_province, by = "PROVINCE")
+setkeyv(filled_dt, c("PROVINCE", "REGION"))
 
 #Set up monthly
 monthly_province_peru_cases <- filled_dt %>%
   group_by(PROVINCE, MONTH) %>%
   summarize(ym_cases = sum(TOTAL_CASES, na.rm = TRUE))
 monthly_province_peru_cases <- as.data.table(monthly_province_peru_cases)
+monthly_province_peru_cases[, YEAR:= as.numeric(substr(MONTH, 1, 4))]
+monthly_province_peru_cases[, MONTH:= as.numeric(substr(MONTH, 6, 8))]
+monthly_province_peru_cases
+monthly_province_peru_cases[, length(MONTH), by = "PROVINCE" ]
 unique(monthly_province_peru_cases$PROVINCE)
 monthly_province_peru_cases <- monthly_province_peru_cases[which(PROVINCE!=0)]
-
-
+monthly_province_peru_cases
 
 
 #Population Data ----
@@ -174,8 +189,6 @@ num_times <- nrow(province_peru_pops_filled)/length(unique(province_peru_pops_fi
 province_peru_pops_filled[, TIME:= rep(seq(1, 192), length(unique(PROVINCE)))]
 
 province_peru_pops_filled <- province_peru_pops_filled[which(TIME>= 7)]
-tmp <- subset(province_peru_pops_filled, PROVINCE == rgn_in_q) 
-
 for(i in 1:length(unique(province_peru_pops_filled$PROVINCE))){
   rgn_in_q <- unique(province_peru_pops_filled$PROVINCE)[i]
   tmp <- subset(province_peru_pops_filled, PROVINCE == rgn_in_q) 
@@ -213,10 +226,11 @@ tmp[which(PROVINCE == "Paucar del Sara Sara"), PROVINCE:= "Paucar Del Sara Sara"
 tmp[which(PROVINCE == "Rodriguez de Mendoza"), PROVINCE:= "Rodriguez De Mendoza"]
 
 #Merge in population data
+
 monthly_province_peru_cases <- merge(monthly_province_peru_cases, tmp, by = c("PROVINCE", "YEAR", "MONTH"))
 monthly_province_peru_cases[which(is.na(ym_cases))] #Check no N/A values
 monthly_province_peru_cases[, DIR:= ym_cases/POP* 100000]
-
+monthly_province_peru_cases
 
 
 
@@ -518,7 +532,6 @@ monthly_province_peru_cases <- merge(monthly_province_peru_cases,subset(tmp, sel
 
 
 #DIR Historical Difference DATA----
-monthly_province_peru_cases
 monthly_province_peru_cases[, HISTORICAL_DIR:= Lag(DIR, 12), by = "PROVINCE"]
 monthly_province_peru_cases[, DIFF_WITH_HISTORICAL_DIR:= DIR - HISTORICAL_DIR, by = "PROVINCE"]
 monthly_province_peru_cases[, DIFF_WITH_HISTORICAL_DIR_LAG:= Lag(DIFF_WITH_HISTORICAL_DIR, 1), by = "PROVINCE"]
@@ -531,7 +544,6 @@ median(monthly_province_peru_cases[which(!is.na(DIFF_WITH_HISTORICAL_DIR_LAG) & 
 num_months <- nrow(monthly_province_peru_cases)/length(unique(monthly_province_peru_cases$PROVINCE))
 setkeyv(monthly_province_peru_cases, c("PROVINCE", "YEAR", "MONTH"))
 monthly_province_peru_cases[, TIME:= rep(seq(1, num_months), length(unique(PROVINCE)))]
-monthly_province_peru_cases[144,]
 
 
 
@@ -898,7 +910,7 @@ paper_ccf_facet_icen_plot
 
 
 #Map dataset and visualisation ----
-province_peru_dt <- map_PROV
+province_peru_ <- map_PROV
 unique(ptl_region_province$PROVINCE)[which(!(unique(ptl_region_province$PROVINCE) %in% province_peru_dt$PROVINCIA))]
 #Morropon spelling
 sort(unique(province_peru_dt$PROVINCIA))
@@ -929,6 +941,8 @@ ggsave(ptl_province_peru_map_by_colours,
        file = file.path(peru.province.out.dir, "ptl_province_peru_map_by_colours.png"), h = 12, w = 30)
 
 
+
+
 #Merging in centroids of provinces ----
 tmp_monthly_province_peru_cases <- copy(monthly_province_peru_cases)
 missing_from_tmp_monthly_province_peru_cases <- which(!(unique(tmp_monthly_province_peru_cases$PROVINCE) %in% province_peru_dt$PROVINCIA))
@@ -944,7 +958,6 @@ tmp_monthly_province_peru_cases_names
 length(which(tmp_monthly_province_peru_cases_names$PROVINCE %in% province_peru_dt$PROVINCIA))
 length(which(tmp_monthly_province_peru_cases_names$PROVINCE_NEW %in% province_peru_dt$PROVINCIA))
 
-head(province_peru_dt)
 tmp_monthly_province_peru_cases_names <- merge(tmp_monthly_province_peru_cases_names, subset(province_peru_dt, select = c("coords_x", "coords_y",
                                                                                                                           "PROVINCIA")),
                                                by.x = "PROVINCE_NEW", by.y = "PROVINCIA")
