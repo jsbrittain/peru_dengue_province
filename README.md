@@ -9,7 +9,7 @@ We sourced climate data of i) temperature and precipiation from the WorldClim mo
 
 Spatial 
 
-_ii) Processing: _province_01.R and province_02.R processes the raw data to produce a dataset of province-level monthly cases across 2010-2011 inclusive, alongside the corresponding demographic and climate information. 
+_ii) Processing:_ The scripts "province_01.R" and "province_02.R" processes the raw data to produce a dataset of province-level monthly cases across 2010-2011 inclusive, alongside the corresponding demographic and climate information. 
 If users wish to use this dataset and avoid all the previous processsing steps, this provided in the file "ptl_province_inla_df.csv".
 
 **2) Retrospective analyses**
