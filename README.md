@@ -1,15 +1,67 @@
-To perform the pipeline presented in https://doi.org/10.1101/2024.10.18.24315690, follow these steps:
+# Interdisciplinary modelling and forecasting of dengue
 
-**1) Data**
+This repository provides scripts and instructions to perform the analyses presented in the paper *Interdisciplinary modelling and forecasting of dengue* [https://doi.org/10.1101/2024.10.18.24315690].
 
-_i) Downloading:_ Raw case data are provided in the file "compressed_data.csv.gz", and province-level population data are provided in "province_pop.xlsx".
-The dengue incidence surveillance data are publicly available from the National Centre for Epidemiology, Disease Prevention and Control (Peru CDC) in Peru’s Ministry of Health. We sourced these from https://www.dge.gob.pe/salasituacional. Mid-year population estimates are made available by the National Institute of Statistics and Information of Peru at https://www.inei.gob.pe/media/MenuRecursivo/indices_tematicos/proy_04.xls. 
+To perform the ensemble analysis presented in the paper requires three steps:
+1. [Data download](#data)
+1. [Preprocessing](#preprocessing)
+1. [Forecasting](#forecasting)
 
-We sourced climate data of i) temperature and precipiation from the WorldClim monthly historical climate dataset, available at https://www.worldclim.org/, ii) SPI-6 data from the European Drought Observatory are available at https://jeodpp.jrc.ec.europa.eu/, and iii) The El Niño indices of the ONI and ICEN from the NOAA (https://origin.cpc.ncep.noaa.gov/) and the Geophysical Institute of Peru (http://met.igp.gob.pe). 
+## Data download
 
-Spatial 
+### Collated data
 
-_ii) Processing:_ The scripts "province_01.R" and "province_02.R" processes the raw data to produce a dataset of province-level monthly cases across 2010-2011 inclusive, alongside the corresponding demographic and climate information. 
-If users wish to use this dataset and avoid all the previous processsing steps, this provided in the file "ptl_province_inla_df.csv".
+Raw collated case data are available as a pre-downloaded and collated archive provided in [compressed_data.csv.gz](processing/compressed_data.csv.gz), with province-level population data provided in [province_pop.xlsx](processing/province_pop.xlsx). This is a useful starting point to familiarise yourself with the workflow. If you wish to download more recent data then follow the instructions below.
 
+### Manual download
 
+To collate the data manually you will need to access data from the following public repositories.
+
+| Dataset | Author | URL |
+| - | - | - |
+| Dengue incidence surveillance data | [National Centre for Epidemiology, Disease Prevention and Control (Peru CDC)](https://www.dge.gob.pe/salasituacional) | https://www.dge.gob.pe/sala-situacional-dengue/#grafico01 |
+| Mid-year population estimates | [National Institute of Statistics and Information of Peru](https://www.gob.pe/inei/) | https://www.inei.gob.pe/media/MenuRecursivo/indices_tematicos/proy_04.xls |
+| Monthly historical temperature and precipiation | [WorldClim](https://www.worldclim.org/) | https://www.worldclim.org/data/monthlywth.html |
+| Standardized Precipitation Index 6 | [European Drought Observatory](https://jeodpp.jrc.ec.europa.eu/) | https://data.jrc.ec.europa.eu/dataset/1534c8f7-42e8-4212-b2dd-6388f60987eb#dataaccess |
+| Oceanic Niño Index (ONI) | [National Oceanic and Atmospheric Administration (NOAA)](https://origin.cpc.ncep.noaa.gov/) | https://www.cpc.ncep.noaa.gov/data/indices/oni.ascii.txt |
+| Indice Costero El Niño (ICEN) | [Geophysical Institute of Peru](http://met.igp.gob.pe) | http://met.igp.gob.pe/datos/icen.txt |
+
+## Preprocessing
+
+### Processed data
+
+Processed data are available as a pre-downloaded and collated archive provided in [ptl_province_inla_df.csv](processing/ptl_province_inla_df.csv). If you wish to process the data yourself then follow the instructions below.
+
+### Manual processing
+
+1. Download the relevant archives (listed above), or decompress the provided archive [compressed_data.csv.gz](processing/compressed_data.csv).
+1. Check the `DIRECTORIES` section of the script [processing/packages_directories.R](processing/packages_directories.R) and ensure that the appropriate directories are set for your system.
+1. Run the following scripts in order in the same R environment from the `processing` directory:
+   1. [packages_directories.R](processing/packages_directories.R)
+   1. [province_01.R](processing/province_01.R)
+   1. [province_02.R](processing/province_02.R)
+
+The output of the final step will be a dataset of province-level monthly cases across 2010-2011 inclusive, alongside the corresponding demographic and climate information. This is stored in the file `ptl_province_inla_df.csv`. Move this file to the `forecasting` directory to continue with the forecasting analysis.
+
+# Forecasting
+
+Forecasting will run several independent models before combining them into an ensemble. The scripts take the processed data `ptl_province_inla_df.csv` from the previous step.
+
+First, load R with a fresh session and set the working directory to the `forecasting` directory. Run the script `forecasting_funcs.R` to load the necessary libraries and utility functions.
+
+Run each of the independent models:
+1. Baseline model:
+   - `province_baseline_forecaster.R`
+1. Bayesian model:
+   - `province_historical_bayesian_forecasting.R`
+   - `province_bayesian_forecasting.R`
+1. TCN, SARIMA and TimeGPT models are run through a Python Jypyter notebook:
+   - Preprocess the data from R: `province_python_setup.R`
+   - Run the Jupyter notebook: `python_peru_forecast.ipynb`
+   - Read the data back into R: `province_python_forecasting.R`
+
+The data can then be merged and the ensemble formed. The following scripts form the ensemble, score the model predictions, and produce visualisations for different variables:
+| Variable | Script |
+| - | - |
+| Log cases | `province_log_cases.R` |
+| Dengue incidence rate | `province_dir_ensemble_scoring.R` |
