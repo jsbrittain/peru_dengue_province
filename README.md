@@ -55,7 +55,7 @@ Run each of the independent models:
 1. Bayesian model:
    - `province_historical_bayesian_forecasting.R`
    - `province_bayesian_forecasting.R`
-1. TCN, SARIMA and TimeGPT models are run through a Python Jypyter notebook:
+1. TCN, SARIMA and TimeGPT models are run through a Python Jupyter notebook:
    - Preprocess the data from R: `province_python_setup.R`
    - Run the Jupyter notebook: `python_peru_forecast.ipynb`
    - Read the data back into R: `province_python_forecasting.R`
