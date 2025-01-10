@@ -45,7 +45,7 @@ The output of the final step will be a dataset of province-level monthly cases a
 
 # Forecasting
 
-Forecasting will run several independent models before combining them into an ensemble. The scripts take the processed data `ptl_province_inla_df.csv` from the previous step.
+Forecasting will run several independent models before combining them into ensembles. The scripts take the processed data `ptl_province_inla_df.csv` from the previous step.
 
 First, load R with a fresh session and set the working directory to the `forecasting` directory. Run the script `forecasting_funcs.R` to load the necessary libraries and utility functions.
 
