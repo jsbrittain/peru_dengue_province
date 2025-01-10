@@ -69,31 +69,41 @@ require(rstan)
 require(readxl)
 require(ubigeo)
 require(remotes)
-require(mapsPERU) #For centroids of provinces
+require(mapsPERU) # For centroids of provinces
 require(ISOweek)
 require(quantgen)#
 require(ggpp)
 require(gghighlight)
 
+# Base directory
+peru.province.base.dir <- file.path(getwd(), "data")
 
-#DIRECTORIES
-peru.province.data.dir <- "C:/Users/mills/Documents/peru_dengue/province/data"
-peru.province.python.dir <-"C:/Users/mills/Documents/peru_dengue/province/python" 
-peru.province.python.data.dir <-"C:/Users/mills/Documents/peru_dengue/province/python/data" 
-peru.province.python.out.dir <-"C:/Users/mills/Documents/peru_dengue/province/python/output" 
+# DIRECTORIES
+peru.province.data.dir <- file.path(peru.province.base.dir, "data")
+peru.province.python.dir <- file.path(peru.province.base.dir, "python")
+peru.province.python.data.dir <- file.path(peru.province.base.dir, "python/data")
+peru.province.python.out.dir <- file.path(peru.province.base.dir, "python/output")
+peru.province.spei.dir <- file.path(peru.province.base.dir, "data/spei")
+peru.province.out.dir <- file.path(peru.province.base.dir, "output")
+peru.province.inla.data.in.dir <- file.path(peru.province.base.dir, "INLA/Input")
+peru.province.inla.data.out.dir <- file.path(peru.province.base.dir, "INLA/Output")
+peru.province.wavelet.out.dir <- file.path(peru.province.base.dir, "wavelet/Output")
+peru.province.wavelet.annual_power.out.dir <- file.path(peru.province.base.dir, "wavelet/Output/annual_power")
+peru.province.wavelet.multi_power.out.dir <- file.path(peru.province.base.dir, "wavelet/Output/multi_power")
+peru.province.xgb.out.dir <- file.path(peru.province.base.dir, "xgb/Output")
+peru.province.ensemble.out.dir <- file.path(peru.province.base.dir, "ensemble/Output")
 
-peru.province.spei.dir <- "C:/Users/mills/Documents/peru_dengue/province/data/spei"
+# Create output directories
+dir.create(peru.province.out.dir, recursive = TRUE)
+dir.create(peru.province.python.dir, recursive = TRUE)
+dir.create(peru.province.inla.data.out.dir, recursive = TRUE)
+dir.create(peru.province.wavelet.out.dir, recursive = TRUE)
+dir.create(peru.province.wavelet.annual_power.out.dir, recursive = TRUE)
+dir.create(peru.province.wavelet.multi_power.out.dir, recursive = TRUE)
+dir.create(peru.province.xgb.out.dir, recursive = TRUE)
+dir.create(peru.province.ensemble.out.dir, recursive = TRUE)
 
-peru.province.out.dir <- "C:/Users/mills/Documents/peru_dengue/province/output"
-peru.province.inla.data.in.dir <- "C:/Users/mills/Documents/peru_dengue/province/INLA/Input"
-peru.province.inla.data.out.dir <- "C:/Users/mills/Documents/peru_dengue/province/INLA/Output"
-peru.province.wavelet.out.dir <- "C:/Users/mills/Documents/peru_dengue/province/wavelet/Output"
-peru.province.wavelet.annual_power.out.dir <- "C:/Users/mills/Documents/peru_dengue/province/wavelet/Output/annual_power"
-peru.province.wavelet.multi_power.out.dir <- "C:/Users/mills/Documents/peru_dengue/province/wavelet/Output/multi_power"
-peru.province.xgb.out.dir <- "C:/Users/mills/Documents/peru_dengue/province/xgb/Output"
-peru.province.ensemble.out.dir <- "C:/Users/mills/Documents/peru_dengue/province/ensemble/Output"
-
-#Boundaries
+# Boundaries
 piura_tumbes_lambayeque <- c("Piura","Tumbes","Lambayeque")
 peru_district_boundaries2 <- st_read(file.path(peru.province.data.dir, "per_admbnda_adm2_ign_20200714.shp"))
 piura_tumbes_lambayeque_boundaries <- subset(peru_district_boundaries2,
@@ -101,7 +111,7 @@ piura_tumbes_lambayeque_boundaries <- subset(peru_district_boundaries2,
 tmp2 <- st_as_sf(peru_district_boundaries2)
 tmp2 <- as_Spatial(tmp2)
 
-#Set up province areas
+# Set up province areas
 province_areas_dt <- data.table(PROVINCE = tmp2$ADM2_ES, REGION_AREA_KM2 = area(tmp2)/ 1000000)
 ptl_province_areas_dt <- subset(province_areas_dt, PROVINCE %in% piura_tumbes_lambayeque_boundaries$ADM2_ES)
 
