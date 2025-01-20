@@ -9,5 +9,6 @@ NAME="peru-build"
 
 # Construct image
 docker build \
+    --platform linux/amd64 \
     -t "${NAME}" \
     .
