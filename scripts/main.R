@@ -26,7 +26,8 @@ source("scripts/processing/packages_directories.R")
 
 # Ensure summarize() is taken from dplyr
 library(conflicted)
-conflict_prefer("summarize", "dplyr")
+conflicts_prefer(dplyr::summarize)
+conflicts_prefer(tsModel::Lag)
 
 # This is geoboundaries cache - creating it avoids a user query (replace with option?)
 dir.create(file.path("~/.cache/R/gb_cache"), recursive = TRUE, showWarnings = FALSE)
@@ -53,7 +54,7 @@ spi_file_name_func <- function(year) {
 
 source("scripts/processing/extra_worldclim_funcs.R")
 source("scripts/processing/province_01.R")
-# source('scripts/processing/province_02.R')
+source('scripts/processing/province_02.R')
 
 # ======================================================================================
 # Forecasting
