@@ -42,6 +42,15 @@ if (FALSE) {
   peru_sf <- ne_states(country = "Peru", returnclass = "sf")
 }
 
+spi_file_name_func <- function(year) {
+  return(
+    file.path(
+      peru.spi6.in.dir,
+      paste0("spg06_m_wld_",year,"0101_",year,"1201_m.nc")
+    )
+  )
+}
+
 source("scripts/processing/extra_worldclim_funcs.R")
 source("scripts/processing/province_01.R")
 # source('scripts/processing/province_02.R')

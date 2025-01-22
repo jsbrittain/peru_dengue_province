@@ -31,12 +31,8 @@ if (xargs$dry_run) {
 log_info("Processing file: ", xargs$output)
 if (!xargs$dry_run) {
   tmp_climate_var_peru <- mask(raster(xargs$input), as_Spatial(peru_sf))
-  tmp_climate_provinces <- raster::extract(
-    tmp_climate_var_peru,
-    peru_district_boundaries2,
-    fun = "mean",
-    weights = TRUE,
-    na.rm = TRUE
+  tmp_climate_provinces <- raster::extract(tmp_climate_var_peru, peru_district_boundaries2,
+    fun = "mean", weights = TRUE, na.rm = TRUE
   )
 }
 log_info("Writing RDS file: ", xargs$output)
