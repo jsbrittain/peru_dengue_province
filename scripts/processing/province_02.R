@@ -25,7 +25,7 @@ maximum_climate_lag <- 4
 # ptl_climate_dt_province <- subset(climate_dt_province, REGION %in%
 # piura_tumbes_lambayeque) climate_dt_province
 ptl_climate_dt_province <- subset(climate_dt_province, REGION %in% piura_tumbes_lambayeque &
-  PROVINCE %in% piura_tumbes_lambayeque_districts_with_cases)
+  PROVINCE %in% piura_tumbes_lambayeque_provinces_with_cases)
 length(unique(ptl_climate_dt_province$PROVINCE))
 
 setkeyv(ptl_climate_dt_province, c("YEAR", "MONTH", "PROVINCE"))
@@ -159,7 +159,7 @@ ptl_province_inla_df[, SEASON := if_else(MONTH %in% summer_months, 1, 0)]
 
 
 # Momentum Indicator ----
-tmp <- subset(monthly_province_peru_cases, PROVINCE %in% piura_tumbes_lambayeque_districts_with_cases)
+tmp <- subset(monthly_province_peru_cases, PROVINCE %in% piura_tumbes_lambayeque_provinces_with_cases)
 setkeyv(tmp, c("PROVINCE", "TIME"))
 tmp2 <- tmp[, list(RSI_DIR = RSI(DIR, n = 3)), by = c("PROVINCE")]
 tmp[, RSI_DIR := tmp2$RSI_DIR]
