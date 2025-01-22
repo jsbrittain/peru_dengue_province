@@ -1429,7 +1429,6 @@ if (file.exists(p01_filename)) {
 
     # Save current workspace
     log_info("Saving current workspace...")
-    p01_filename <- file.path(peru.province.out.dir, "province_01.RData")
     save.image(file = p01_filename)
     log_info("Saved current workspace to ", p01_filename)
 }
