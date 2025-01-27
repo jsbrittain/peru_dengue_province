@@ -99,6 +99,12 @@ RUN R -e 'library(remotes); remotes::install_github("jmcastagnetto/ubigeo", depe
 RUN R -e 'library(remotes); remotes::install_github("wmgeolab/rgeoboundaries", dependencies = TRUE, quiet = TRUE)'
 RUN R -e 'library(remotes); remotes::install_github("zdk123/SpiecEasi", dependencies = TRUE, quiet = TRUE)'
 
+RUN apt-get update && apt-get install -y python3 python3-pip python3-venv
+RUN python3 -m venv /venv
+RUN /venv/bin/pip install --upgrade pip
+RUN /venv/bin/pip install grapevne snakemake
+ENV PATH="/venv/bin:$PATH"
+
 # Set working directory
 WORKDIR /app
 

@@ -8,3 +8,4 @@ snakemake --cores ${SNAKEMAKE_CORES} --snakefile workflows/datasets/worldclim/wo
 snakemake --cores ${SNAKEMAKE_CORES} --snakefile workflows/datasets/spi6/workflow/Snakefile
 snakemake --cores ${SNAKEMAKE_CORES} --snakefile workflows/datasets/oni/workflow/Snakefile
 snakemake --cores ${SNAKEMAKE_CORES} --snakefile workflows/datasets/icen/workflow/Snakefile
+snakemake --cores ${SNAKEMAKE_CORES} --snakefile workflows/datasets/shapefiles/workflow/Snakefile

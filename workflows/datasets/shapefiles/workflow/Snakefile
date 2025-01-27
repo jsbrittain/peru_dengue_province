@@ -1,0 +1,27 @@
+"""Shapefiles
+
+Subnational Administrative Boundaries
+https://data.humdata.org/dataset/cod-ab-per
+
+"""
+import os, shutil, pathlib
+from grapevne_helper import import_grapevne
+gv = import_grapevne(workflow)
+
+target_folder = "data/shapefiles"
+
+url = "https://data.humdata.org/dataset/54fc7f4d-f4c0-4892-91f6-2fe7c1ecf363/resource/63cc642a-2957-4f25-8a17-086c99d275e8/download/per_adm_ign_20200714_shp.zip"
+
+
+rule download:
+    output:
+        outfile = os.path.join(target_folder, url.split('/')[-1]),
+    params:
+        url = url,
+        outdir = target_folder,
+    shell:
+        """
+        mkdir -p {params.outdir}
+        wget {params.url} -O {output.outfile}
+        unzip {output.outfile} -d {params.outdir}
+        """

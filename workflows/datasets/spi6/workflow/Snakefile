@@ -4,7 +4,7 @@ import os, shutil, pathlib
 from grapevne_helper import import_grapevne
 gv = import_grapevne(workflow)
 
-years = range(2010, 2024)
+years = range(2001, 2024)
 
 target_folder = "data/spi6"
 

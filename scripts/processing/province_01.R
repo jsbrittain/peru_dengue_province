@@ -595,7 +595,7 @@ if (file.exists(p01_filename)) {
     # ::: end of JSB fix ::: setnames(icen_data, colnames(icen_data),
     # toupper(colnames(icen_data))) # JSB: Doesn't do anything??
 
-    # Change oni.scii.txt -> detrend.nino34.ascii.txt to provide monthly data
+    # Change oni.ascii.txt -> detrend.nino34.ascii.txt to provide monthly data
     oni_data <- data.table(read.table(file.path(peru.province.base.dir, "oni", "detrend.nino34.ascii.txt"),
       header = TRUE
     ))
