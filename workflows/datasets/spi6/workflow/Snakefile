@@ -1,0 +1,31 @@
+"""
+"""
+import os, shutil, pathlib
+from grapevne_helper import import_grapevne
+gv = import_grapevne(workflow)
+
+years = range(2010, 2024)
+
+target_folder = "data/spi6"
+
+urls = expand(
+    "https://drought.emergency.copernicus.eu/data/Drought_Observatories_datasets/GDO_Standardized_Precipitation_Index_SPI6/ver1-2-0/spg06_m_wld_{year}0101_{year}1201_m.nc",
+    year=years,
+)
+
+
+rule download:
+    input:
+        map(
+            gv.remote,
+            expand("{url}", url=urls)
+        ),
+    output:
+        map(
+            lambda url: os.path.join(target_folder, url.split('/')[-1]),
+            expand("{url}", url=urls)
+        ),
+    run:
+        pathlib.Path(target_folder).mkdir(parents=True, exist_ok=True)
+        for src, dest in zip(input, output):
+            shutil.move(src, dest)

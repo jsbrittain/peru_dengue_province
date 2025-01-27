@@ -13,11 +13,7 @@ rule tif2rds:
         outfile = 'data/climate/{filestem}.RDS',
     shell:
         """
-        docker run \
-            -v $(pwd):/app -w /app \
-            --platform linux/amd64 \
-            peru-build \
-            Rscript {input.script} \
-                --input {input.infile} \
-                --output {output.outfile}
+        Rscript {input.script} \
+            --input {input.infile} \
+            --output {output.outfile}
         """

@@ -1,0 +1,19 @@
+"""Indice Costero El Niño (ICEN)
+
+Geophysical Institute of Peru
+http://met.igp.gob.pe/
+
+"""
+import os, shutil, pathlib
+from grapevne_helper import import_grapevne
+gv = import_grapevne(workflow)
+
+target_folder = "data/icen"
+url = "http://met.igp.gob.pe/datos/icen.txt"
+
+rule download:
+    input: src = gv.remote(url),
+    output: dest = os.path.join(target_folder, url.split("/")[-1])
+    run:
+        pathlib.Path(target_folder).mkdir(parents=True, exist_ok=True)
+        shutil.move(input.src, output.dest)

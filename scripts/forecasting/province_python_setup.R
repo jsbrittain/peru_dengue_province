@@ -1,3 +1,4 @@
+library(logger)
 # Write data.table to csv for Python forecasting as follows:
 # Set up data.table with log(CASES + 1)
 # DeepTCN, TimeGPT, and SARIMA models all fit using log_cases to ensure
@@ -6,6 +7,7 @@
 # We will also analyse all predictions at the log scale as recommended
 # See Bosse et al (2023): https://doi.org/10.1371/journal.pcbi.1011393
 # Look at CRPS in windows, and by geography.
+log_info("Setting up data for Python forecasting")
 ptl_province_inla_df <- readRDS(file = file.path(peru.province.out.dir, "ptl_province_inla_df.RDS"))
 setkeyv(ptl_province_inla_df, c("PROVINCE", "TIME"))
 ptl_province_inla_df[, LOG_CASES := log1p(CASES)]
@@ -21,6 +23,7 @@ ptl_province_inla_df[, unique_id := as.factor((PROVINCE))]
 
 
 # Output for python ---
+log_info("Writing data for Python forecasting")
 fwrite(
   ptl_province_inla_df,
   file.path(
@@ -28,3 +31,5 @@ fwrite(
     "ptl_province_inla_df.csv"
   )
 )
+
+log_info("Done setting up data for Python forecasting.")

@@ -346,7 +346,7 @@ if (file.exists(p01_filename)) {
       # Launch Snakemake to process the worldclim data
       log_info("Launch Snakemake to process the worldclim data")
       system2("snakemake",
-        args = c("--cores", "4", "--snakefile", "scripts/processing/climate.smk"),
+        args = c("--cores", "4", "--snakefile", "workflows/processing/climate/climate.smk"),
         stdout = TRUE, stderr = TRUE
       )
 
@@ -526,9 +526,6 @@ if (file.exists(p01_filename)) {
           saveRDS(prec_2020_2021_province, file = filename)
         }
       }
-
-      # :::JSB::: need to run scripts/processing/spi6/get_spi6.py here to
-      # download all available nc files.
 
       # SPI-6 Data ---- Standardized Precipitation Index (at 6 month accumulation
       # period)

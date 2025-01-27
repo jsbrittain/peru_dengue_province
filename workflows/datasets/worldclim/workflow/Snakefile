@@ -1,0 +1,40 @@
+"""
+
+WorldClim
+https://www.worldclim.org/data/monthlywth.html
+
+"""
+import os, shutil, pathlib
+from grapevne_helper import import_grapevne
+gv = import_grapevne(workflow)
+
+res = "2.5m"
+years = ["2010-2019", "2020-2021"]
+modality = ["tmin", "tmax", "prec"]
+
+target_folder = "data/climate"
+
+urls = expand(
+    "https://geodata.ucdavis.edu/climate/worldclim/2_1/hist/cts4.06/{res}/wc2.1_cruts4.06_{res}_{modality}_{years}.zip",
+    res=res,
+    modality=modality,
+    years=years,
+)
+
+
+rule download:
+    input:
+        map(
+            gv.remote,
+            expand("{url}", url=urls)
+        ),
+    output:
+        map(
+            lambda url: os.path.join(target_folder, url.split('/')[-1]),
+            expand("{url}", url=urls)
+        ),
+    run:
+        pathlib.Path(target_folder).mkdir(parents=True, exist_ok=True)
+        for src, dest in zip(input, output):
+            shutil.move(src, dest)
+            shutil.unpack_archive(dest, target_folder)

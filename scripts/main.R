@@ -2,7 +2,7 @@
 # Parameters
 # ======================================================================================
 
-models.baseline <- FALSE
+models.baseline <- TRUE
 models.bayesian <- FALSE
 models.python <- FALSE
 
@@ -55,6 +55,10 @@ spi_file_name_func <- function(year) {
 source("scripts/processing/extra_worldclim_funcs.R")
 source("scripts/processing/province_01.R")
 source('scripts/processing/province_02.R')
+
+# (must be run to set up LAG_1_LOG_CASES before _any_ forecasting)
+source('scripts/forecasting/province_python_setup.R')
+source('scripts/processing/province_02b.R')
 
 # ======================================================================================
 # Forecasting

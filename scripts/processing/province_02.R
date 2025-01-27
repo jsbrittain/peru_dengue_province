@@ -264,6 +264,11 @@ if (file.exists(p02_filename)) {
     log_info("Setting key of data.table")
     setkeyv(ptl_province_inla_df, c("TIME", "PROVINCE"))
 
+    # Save ptl
+    log_info("Saving ptl_province_inla_df")
+    saveRDS(ptl_province_inla_df, file.path(peru.province.out.dir, "ptl_province_inla_df.RDS"))
+    log_info("Saved ptl_province_inla_df")
+
     log_info("Finished processing Peru province data (02).")
 
     # Save current workspace
@@ -272,3 +277,33 @@ if (file.exists(p02_filename)) {
     save.image(file = p02_filename)
     log_info("Saved current workspace to ", p02_filename)
 }
+
+
+# Add lines from province_correlations.R
+
+# All times; plot provinces by latitude
+latitude_monthly_dt <- copy(ptl_province_inla_df)
+setkeyv(latitude_monthly_dt, c("latitude", "TIME"))
+latitude_monthly_dt[, PROV_IND:= NULL]
+tmp <- unique(subset(latitude_monthly_dt, select = c("PROVINCE")))
+tmp[, LAT_PROV_IND:= seq(1, nrow(tmp), by = 1)]
+latitude_monthly_dt <- merge(latitude_monthly_dt, tmp, by = "PROVINCE")
+setkeyv(latitude_monthly_dt, c("latitude", "TIME"))
+latitude_monthly_dt[, SCALED_DIR:= scale(DIR), by = "PROVINCE"]
+
+ptl_province_inla_df[, YEAR_DECIMAL:= YEAR + (MONTH - 1)/12]
+
+ptl_province_inla_df <- merge(ptl_province_inla_df, 
+                              unique(subset(latitude_monthly_dt, select = c("LAT_PROV_IND", "PROVINCE"))),
+                              by = c("PROVINCE"))
+
+lines_ptl_province_inla_df <- subset(ptl_province_inla_df, select = c("PROVINCE", "REGION",
+                                                                      "MONTH",
+                                                                      "DIR", "longitude",
+                                                                      "latitude"))
+ptl_province_inla_df[, SCALED_DIR:= scale(DIR), by = "PROVINCE"]
+ptl_province_inla_df[, LOG_DIR:= log(DIR + 0.01)]
+
+ptl_province_inla_df[, LAT_PROV_IND := latitude_monthly_dt$LAT_PROV_IND]
+ptl_province_inla_df[, LONG_PROV_IND := latitude_monthly_dt$LAT_PROV_IND]
+

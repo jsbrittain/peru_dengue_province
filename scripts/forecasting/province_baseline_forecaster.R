@@ -1,9 +1,13 @@
+library(logger)
+
 # Ensuring the following have been defined
+log_info("Ensure the following have been defined")
 ptl_province_inla_df[, LAG_1_CASES := expm1(LAG_1_LOG_CASES)]
 ptl_province_inla_df[, DIFF_CASES := CASES - LAG_1_CASES]
 
 
 # Functions to run baseline model
+log_info("Functions to run baseline model")
 new_quantile_baseline <- function(inc_diffs, symmetrize = TRUE) {
   if (symmetrize) {
     quantile_baseline <- structure(
@@ -66,16 +70,24 @@ new_predict.quantile_baseline <- function(
 }
 
 fit_baseline_function_to_all_data <- function(data, predict_times) {
+  log_info("Fit baseline function to all data")
+  filenames <- NULL
   results_dt <- NULL
   for (i in 1:length(unique(data$PROVINCE))) {
-    # Baseline model fitted to each province independently
-    if (i %% 5 == 0) {
-      print(i) # Memory considerations
-      gc()
-    }
     prov_in_q <- unique(data$PROVINCE)[i]
     province_level_data <- subset(data, PROVINCE == prov_in_q)
     for (j in 1:length(predict_times)) {
+
+      # Skip if the file already exists
+      if (file.exists(file.path(
+        peru.province.ensemble.out.dir,
+        paste0("baseline_results_", i, "_", j, ".RDS")
+      ))) {
+        log_info(paste0("File exists -- skipping province ", i, " time ", j))
+        next
+      }
+
+      log_info(paste0("Predicting province ", prov_in_q, " [", i, "]", " time ", predict_times[j], " [", j, "]"))
       forecast_time_in_q <- predict_times[j] # Times at which we make the predictions
       tmp_province_level_data <- subset(
         province_level_data,
@@ -93,30 +105,71 @@ fit_baseline_function_to_all_data <- function(data, predict_times) {
 
       # Important: This prediction is for the next time point
       tmp_result[, TIME := rep(forecast_time_in_q + 1, nrow(tmp_result))]
-      results_dt <- rbind(results_dt, tmp_result)
+
+      filename <- file.path(
+        peru.province.ensemble.out.dir,
+        paste0("baseline_results_", i, "_", j, ".RDS")
+      )
+      saveRDS(tmp_result, file = filename)
+      filenames.append(filename)
+      tmp_result <- NULL   # Clear the memory
+      tmp_province_level_data <- NULL
+      tmp_quantile_baseline_object <- NULL
+      tmp_baseline_result <- NULL
+
+      #results_dt <- rbind(results_dt, tmp_result)
     }
   }
+  
+  for (i in 1:length(unique(data$PROVINCE))) {
+    for (j in 1:length(predict_times)) {
+        filenames <- c(filenames, file.path(
+          peru.province.ensemble.out.dir,
+          paste0("baseline_results_", i, "_", j, ".RDS")
+        ))
+    }
+  }
+
+  # Read and combine all files
+  log_info("Concatenating baseline results")
+  results_dt <- rbindlist(
+    lapply(
+      filenames,
+      function(f) {
+        d <- readRDS(f)
+        d[, PROVINCE := as.factor(PROVINCE)]
+        d[, TIME := as.integer(TIME)]
+        d[, SAMPLE := as.integer(SAMPLE)]
+        return(d)
+      }
+    ),
+    use.names = TRUE,
+    fill = TRUE
+  )
+
   return(results_dt)
 }
 
 # Times at which we make our forecasts
+log_info("Times at which we make our forecasts")
 predict_times <- unique(ptl_province_inla_df[which(TIME < max(TIME))]$TIME)
-baseline_results <- fit_baseline_function_to_all_data(
-  ptl_province_inla_df,
-  predict_times
+baseline_results_filename <- file.path(
+  peru.province.ensemble.out.dir,
+  "baseline_results_2010_2021.RDS"
 )
-saveRDS(baseline_results,
-  file = file.path(
-    peru.province.ensemble.out.dir,
-    "baseline_results_2010_2021.RDS"
+if (file.exists(baseline_results_filename)) {
+  baseline_results <- readRDS(baseline_results_filename)
+} else {
+  baseline_results <- fit_baseline_function_to_all_data(
+    ptl_province_inla_df,
+    predict_times
   )
-)
-# baseline_results <- readRDS(file = file.path(peru.province.ensemble.out.dir,
-#                  "baseline_results_2010_2021.RDS"))
-# baseline_results
+  saveRDS(baseline_results, file = baseline_results_filename)
+}
 
 # Set up data.tables for scoring ----
 # DIR ----
+log_info("Set up data.tables for scoring")
 baseline_dir.pred_dt_2010_2021 <- data.table(baseline_results)
 baseline_dir.pred_dt_2010_2021
 setnames(
@@ -158,8 +211,8 @@ baseline_dir.pred_dt_2010_2018_for_scoring <- subset(baseline_dir.pred_dt_2010_2
   )
 )
 
+log_info("Check forecasts")
 check_forecasts(baseline_dir.pred_dt_2010_2018_for_scoring)
-
 
 quantile_baseline_dir.pred_dt_2010_2018 <-
   sample_to_quantile(baseline_dir.pred_dt_2010_2018_for_scoring,
@@ -234,6 +287,7 @@ quantile_baseline_dir.pred_dt_2018_2021 <- readRDS(file = file.path(
 
 
 # 2) Log Cases ----
+log_info("Log cases...")
 baseline_log_cases.pred_dt_2010_2021 <- data.table(baseline_results)
 setnames(
   baseline_log_cases.pred_dt_2010_2021,
@@ -275,6 +329,7 @@ baseline_log_cases.pred_dt_2010_2018_for_scoring <- subset(baseline_log_cases.pr
   )
 )
 
+log_info("Check forecasts")
 check_forecasts(baseline_log_cases.pred_dt_2010_2018_for_scoring)
 
 

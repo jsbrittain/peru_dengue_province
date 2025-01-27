@@ -90,6 +90,7 @@ peru.province <- peru.province.base.dir # icen.txt
 # Create output directories
 dir.create(peru.province.out.dir, recursive = TRUE, showWarnings = FALSE)
 dir.create(peru.province.python.out.dir, recursive = TRUE, showWarnings = FALSE)
+dir.create(peru.province.python.data.dir, recursive = TRUE, showWarnings = FALSE)
 dir.create(peru.province.inla.data.in.dir, recursive = TRUE, showWarnings = FALSE)
 dir.create(peru.province.inla.data.out.dir, recursive = TRUE, showWarnings = FALSE)
 dir.create(peru.province.wavelet.out.dir, recursive = TRUE, showWarnings = FALSE)

@@ -97,6 +97,7 @@ RUN R -e 'library(remotes); remotes::install_github("reichlab/xgbstack", depende
 RUN R -e 'library(remotes); remotes::install_github("reichlab/densitystackr", dependencies = TRUE, quiet = TRUE)'
 RUN R -e 'library(remotes); remotes::install_github("jmcastagnetto/ubigeo", dependencies = TRUE, quiet = TRUE)'
 RUN R -e 'library(remotes); remotes::install_github("wmgeolab/rgeoboundaries", dependencies = TRUE, quiet = TRUE)'
+RUN R -e 'library(remotes); remotes::install_github("zdk123/SpiecEasi", dependencies = TRUE, quiet = TRUE)'
 
 # Set working directory
 WORKDIR /app

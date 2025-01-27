@@ -1,0 +1,19 @@
+"""Oceanic Niño Index (ONI)
+
+National Oceanic and Atmospheric Administration (NOAA)
+https://origin.cpc.ncep.noaa.gov/
+
+"""
+import os, shutil, pathlib
+from grapevne_helper import import_grapevne
+gv = import_grapevne(workflow)
+
+target_folder = "data/oni"
+url = "https://www.cpc.ncep.noaa.gov/data/indices/oni.ascii.txt"
+
+rule download:
+    input: src = gv.remote(url),
+    output: dest = os.path.join(target_folder, url.split("/")[-1])
+    run:
+        pathlib.Path(target_folder).mkdir(parents=True, exist_ok=True)
+        shutil.move(input.src, output.dest)

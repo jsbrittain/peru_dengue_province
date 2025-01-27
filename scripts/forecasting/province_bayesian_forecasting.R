@@ -47,7 +47,9 @@ for (i in province_first_time_2018:(nrow(ptl_province_inla_df) / num_provinces -
   # Note we have excluded zeroth lag as we forecast with one month horizon
 
   # We start in the 5th month of the first year
-  rt_forecast_lag_tmax <- rt_forecast_lag_tmax[num_provinces * 4 + 1:nrow(rt_forecast_lag_tmax), ]
+  # ::: JSB ::: The indexing here can't work??? need to adjust the end index...
+  #rt_forecast_lag_tmax <- rt_forecast_lag_tmax[num_provinces * 4 + 1:nrow(rt_forecast_lag_tmax), ]
+  rt_forecast_lag_tmax <- rt_forecast_lag_tmax[(num_provinces * 4 + 1):nrow(rt_forecast_lag_tmax), ]
 
   # Only keep first 3
   rt_forecast_lag_tmax <- rt_forecast_lag_tmax[1:nrow(rt_forecast_dt), 1:3]
@@ -59,7 +61,7 @@ for (i in province_first_time_2018:(nrow(ptl_province_inla_df) / num_provinces -
     group = ptl_climate_dt_province$PROVINCE,
     k = 1:maximum_climate_lag
   )
-  rt_forecast_lag_tmin <- rt_forecast_lag_tmin[num_provinces * 4 + 1:nrow(rt_forecast_lag_tmin), ]
+  rt_forecast_lag_tmin <- rt_forecast_lag_tmin[(num_provinces * 4 + 1):nrow(rt_forecast_lag_tmin), ]
   rt_forecast_lag_tmin <- rt_forecast_lag_tmin[1:nrow(rt_forecast_dt), 1:3]
 
   # Precipitation (prec)
@@ -67,7 +69,7 @@ for (i in province_first_time_2018:(nrow(ptl_province_inla_df) / num_provinces -
     group = ptl_climate_dt_province$PROVINCE,
     k = 1:maximum_climate_lag
   )
-  rt_forecast_lag_prec <- rt_forecast_lag_prec[num_provinces * 4 + 1:nrow(rt_forecast_lag_prec), ]
+  rt_forecast_lag_prec <- rt_forecast_lag_prec[(num_provinces * 4 + 1):nrow(rt_forecast_lag_prec), ]
   rt_forecast_lag_prec <- rt_forecast_lag_prec[1:nrow(rt_forecast_dt), 1:3]
 
 
@@ -76,7 +78,7 @@ for (i in province_first_time_2018:(nrow(ptl_province_inla_df) / num_provinces -
     group = ptl_climate_dt_province$PROVINCE,
     k = 1:maximum_climate_lag
   )
-  rt_forecast_lag_tmax_roll_2 <- rt_forecast_lag_tmax_roll_2[num_provinces * 4 + 1:nrow(rt_forecast_lag_tmax_roll_2), ]
+  rt_forecast_lag_tmax_roll_2 <- rt_forecast_lag_tmax_roll_2[(num_provinces * 4 + 1):nrow(rt_forecast_lag_tmax_roll_2), ]
   rt_forecast_lag_tmax_roll_2 <- rt_forecast_lag_tmax_roll_2[1:nrow(rt_forecast_dt), 1:3]
 
   # tmin(tmin_roll_2)
@@ -84,7 +86,7 @@ for (i in province_first_time_2018:(nrow(ptl_province_inla_df) / num_provinces -
     group = ptl_climate_dt_province$PROVINCE,
     k = 1:maximum_climate_lag
   )
-  rt_forecast_lag_tmin_roll_2 <- rt_forecast_lag_tmin_roll_2[num_provinces * 4 + 1:nrow(rt_forecast_lag_tmin_roll_2), ]
+  rt_forecast_lag_tmin_roll_2 <- rt_forecast_lag_tmin_roll_2[(num_provinces * 4 + 1):nrow(rt_forecast_lag_tmin_roll_2), ]
   rt_forecast_lag_tmin_roll_2 <- rt_forecast_lag_tmin_roll_2[1:nrow(rt_forecast_dt), 1:3]
 
   # precipitation (prec_roll_2)
@@ -92,7 +94,7 @@ for (i in province_first_time_2018:(nrow(ptl_province_inla_df) / num_provinces -
     group = ptl_climate_dt_province$PROVINCE,
     k = 1:maximum_climate_lag
   )
-  rt_forecast_lag_prec_roll_2 <- rt_forecast_lag_prec_roll_2[num_provinces * 4 + 1:nrow(rt_forecast_lag_prec_roll_2), ]
+  rt_forecast_lag_prec_roll_2 <- rt_forecast_lag_prec_roll_2[(num_provinces * 4 + 1):nrow(rt_forecast_lag_prec_roll_2), ]
   rt_forecast_lag_prec_roll_2 <- rt_forecast_lag_prec_roll_2[1:nrow(rt_forecast_dt), 1:3]
 
 
@@ -101,7 +103,7 @@ for (i in province_first_time_2018:(nrow(ptl_province_inla_df) / num_provinces -
     group = ptl_climate_dt_province$PROVINCE,
     k = 1:maximum_climate_lag
   )
-  rt_forecast_lag_spi <- rt_forecast_lag_spi[num_provinces * 4 + 1:nrow(rt_forecast_lag_spi), ]
+  rt_forecast_lag_spi <- rt_forecast_lag_spi[(num_provinces * 4 + 1):nrow(rt_forecast_lag_spi), ]
   rt_forecast_lag_spi <- rt_forecast_lag_spi[1:nrow(rt_forecast_dt), 1:2] # Only keep up to lag 2
 
 
@@ -109,14 +111,14 @@ for (i in province_first_time_2018:(nrow(ptl_province_inla_df) / num_provinces -
   rt_forecast_lag_oni <- tsModel::Lag(ptl_climate_dt_province$ANOM,
     k = 1:maximum_climate_lag
   )
-  rt_forecast_lag_oni <- rt_forecast_lag_oni[num_provinces * 4 + 1:nrow(rt_forecast_lag_oni), ]
+  rt_forecast_lag_oni <- rt_forecast_lag_oni[(num_provinces * 4 + 1):nrow(rt_forecast_lag_oni), ]
   rt_forecast_lag_oni <- rt_forecast_lag_oni[1:nrow(rt_forecast_dt), 1:4]
 
   # ICEN
   rt_forecast_lag_icen <- tsModel::Lag(ptl_climate_dt_province$E_INDEX,
     k = 1:maximum_climate_lag
   )
-  rt_forecast_lag_icen <- rt_forecast_lag_icen[num_provinces * 4 + 1:nrow(rt_forecast_lag_icen), ]
+  rt_forecast_lag_icen <- rt_forecast_lag_icen[(num_provinces * 4 + 1):nrow(rt_forecast_lag_icen), ]
   rt_forecast_lag_icen <- rt_forecast_lag_icen[1:nrow(rt_forecast_dt), 1:4]
 
   lagknot <- c(1, 2) # 1+2 months for lag knots
