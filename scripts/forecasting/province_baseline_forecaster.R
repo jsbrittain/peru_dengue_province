@@ -111,13 +111,6 @@ fit_baseline_function_to_all_data <- function(data, predict_times) {
         paste0("baseline_results_", i, "_", j, ".RDS")
       )
       saveRDS(tmp_result, file = filename)
-      filenames <- c(filenames, filename)
-      tmp_result <- NULL   # Clear the memory
-      tmp_province_level_data <- NULL
-      tmp_quantile_baseline_object <- NULL
-      tmp_baseline_result <- NULL
-
-      #results_dt <- rbind(results_dt, tmp_result)
     }
   }
   
