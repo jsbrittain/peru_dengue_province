@@ -23,5 +23,5 @@ rule download:
         """
         mkdir -p {params.outdir}
         wget {params.url} -O {output.outfile}
-        unzip {output.outfile} -d {params.outdir}
+        unzip -u {output.outfile} -d {params.outdir}
         """

@@ -73,4 +73,5 @@ To run the pipeline you will need a container service such as docker. Run the pi
 - data/cases/2010_2021_cases_full_data.csv
 - data/shapefiles/province_pop.csv
 - data/shapefiles/province_pop.xlsx
+- data/shapefiles/census_data.xlsx
 - data/shapefiles/2007_census_data.xlsx
