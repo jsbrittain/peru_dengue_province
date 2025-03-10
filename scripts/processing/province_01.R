@@ -588,7 +588,7 @@ if (file.exists(p01_filename)) {
     # ::: JSB fix ::: icen_data <-
     # data.table(read.table(file.path(peru.province.base.dir, 'icen', 'icen.txt'),
     # header = TRUE))
-    icen_data <- data.table(read.table(file.path(peru.province.base.dir, "icen", "icen.txt"),
+    icen_data <- data.table(read.table(file.path(peru.province.base.dir, "icen", "ICEN.txt"),
       header = FALSE, comment.char = "%"
     ))
     setnames(icen_data, colnames(icen_data), c("YEAR", "MONTH", "E_INDEX")) # JSB: set column names manually

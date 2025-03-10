@@ -2,7 +2,7 @@
 # Parameters
 # ======================================================================================
 
-models.baseline <- TRUE
+models.baseline <- TRUE  # These get overwritten by intermediate workspace saves
 models.bayesian <- FALSE
 models.python <- FALSE
 
@@ -72,11 +72,13 @@ setwd("scripts/forecasting")
 # setDT(ptl_province_inla_df)  # coerce to datatable
 
 # Run baseline model
+models.baseline <- FALSE  # Need to specify here to avoid overwriting
 if (models.baseline) {
   source("province_baseline_forecaster.R")
 }
 
 # Run Bayesian model
+models.bayesian <- TRUE  # Need to specify here to avoid overwriting
 if (models.bayesian) {
   source("province_historical_bayesian_forecasting.R")
   source("province_bayesian_forecasting.R")

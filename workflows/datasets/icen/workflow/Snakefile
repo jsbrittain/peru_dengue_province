@@ -9,7 +9,7 @@ from grapevne_helper import import_grapevne
 gv = import_grapevne(workflow)
 
 target_folder = "data/icen"
-url = "http://met.igp.gob.pe/datos/icen.txt"
+url = "http://met.igp.gob.pe/datos/ICEN.txt"
 
 rule download:
     input: src = gv.remote(url),
