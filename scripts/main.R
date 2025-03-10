@@ -75,6 +75,12 @@ setwd("scripts/forecasting")
 models.baseline <- FALSE  # Need to specify here to avoid overwriting
 if (models.baseline) {
   source("province_baseline_forecaster.R")
+  # Results plot
+  baseline_plot <- ggplot(dat2)
+    + geom_line(aes(x = target_end_date, y = prediction), color = "orange")
+    + geom_line(aes(x = target_end_date, y = true_value), color = "forestgreen")
+    + facet_wrap(location ~ ., scales = "free_y")
+  ggsave(baseline_plot,file = "baseline_plot.png", h = 16, w = 18)
 }
 
 # Run Bayesian model
