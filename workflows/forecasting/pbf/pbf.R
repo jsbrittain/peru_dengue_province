@@ -1,7 +1,3 @@
-
-# REAL-TIME FORECASTING ----
-log_info("Running province_bayesian_forecasting.R")
-
 # Packages -----
 require(xtable)
 require(epiR)
@@ -13,6 +9,8 @@ require(scoringRules)
 require(scoringutils)
 require(INLA)
 
+library(dlnm)
+library(conflicted)
 library(argparse)
 library(logger)
 library(VGAM)
@@ -60,7 +58,7 @@ provinces <- unique(ptl_province_inla_df$PROVINCE)
 num_provinces <- length(provinces)
 maximum_climate_lag <- 4 # Upper bound on lags used
 
-i <- xargs$index
+i <- as.numeric(xargs$index)
 filename_i <- file.path(peru.province.inla.data.out.dir, paste0("zi_pois_season_sq_rsi_dir_lag_tmin_roll_2_prec_roll_2_spi_icen_2018_2021_rt_forecast_dir.pred", i, ".RDS"))
 
 log_info("Processing file: ", filename_i)

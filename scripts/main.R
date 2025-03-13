@@ -72,7 +72,7 @@ setwd("scripts/forecasting")
 # setDT(ptl_province_inla_df)  # coerce to datatable
 
 # Run baseline model
-models.baseline <- FALSE  # Need to specify here to avoid overwriting
+models.baseline <- TRUE  # Need to specify here to avoid overwriting
 if (models.baseline) {
   source("province_baseline_forecaster.R")
   # Results plot

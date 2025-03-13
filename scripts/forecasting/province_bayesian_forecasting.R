@@ -3,7 +3,7 @@
 
 # Clean up old trigger files
 filestem <- "zi_pois_season_sq_rsi_dir_lag_tmin_roll_2_prec_roll_2_spi_icen_2018_2021_rt_forecast_dir.pred"
-file_pattern <- paste0("^", filestem, ".*\\.RDS\\.trigger$")
+file_pattern <- paste0("^", filestem, "*.trigger$")
 file_names <- list.files(path = peru.province.inla.data.out.dir, pattern = file_pattern, full.names = TRUE)
 file.remove(file_names)
 
@@ -37,7 +37,9 @@ for (i in (province_first_time_2018):(nrow(ptl_province_inla_df) / num_provinces
   tmp_dir.pred <-
     readRDS(file = file.path(
       peru.province.inla.data.out.dir,
-      paste0("zi_pois_season_sq_rsi_ns_mod_historical_tmin_roll_2_prec_roll_2_spi_icen_2018_2021_dir.pred", i, ".RDS")
+      # JSB: Changed filenames
+      # paste0("zi_pois_season_sq_rsi_ns_mod_historical_tmin_roll_2_prec_roll_2_spi_icen_2018_2021_dir.pred", i, ".RDS")
+      paste0("zi_pois_season_sq_rsi_dir_lag_tmin_roll_2_prec_roll_2_spi_icen_2018_2021_rt_forecast_dir.pred", i, ".RDS")
     ))
   all_dir.pred <- rbind(all_dir.pred, tmp_dir.pred)
 }
@@ -74,6 +76,12 @@ saveRDS(climate_dir.pred.dt_2018_2021, file = file.path(
   peru.province.inla.data.out.dir,
   paste0("climate_dir.pred.dt_2018_2021.RDS")
 ))
+
+quantiles = c(
+  0.01, 0.025,
+  seq(0.05, 0.95, 0.05),
+  0.975, 0.99
+)
 
 climate_2018_2021_forecast_quantile_dt <-
   sample_to_quantile(climate_dir.pred.dt_2018_2021,

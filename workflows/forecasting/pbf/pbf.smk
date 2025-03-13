@@ -7,7 +7,7 @@ filestem = "zi_pois_season_sq_rsi_dir_lag_tmin_roll_2_prec_roll_2_spi_icen_2018_
 
 rule all:
     input:
-        ['.'.join(file.split('.')[:-1]) for file in glob(f'data/INLA/Output/{filestem}*.RDS.trigger')]
+        ['.'.join(file.split('.')[:-1]) for file in glob(f'{dirstem}/{filestem}*.RDS.trigger')]
 
 rule phbf:
     input:
