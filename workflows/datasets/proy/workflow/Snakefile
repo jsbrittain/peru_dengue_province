@@ -1,0 +1,18 @@
+"""Mid-year population estimates
+
+National Institute of Statistics and Information of Peru (https://www.gob.pe/inei/)
+
+"""
+import os, shutil, pathlib
+from grapevne_helper import import_grapevne
+gv = import_grapevne(workflow)
+
+target_folder = "data/pop"
+url = "https://www.inei.gob.pe/media/MenuRecursivo/indices_tematicos/proy_04.xls"
+
+rule download:
+    input: src = gv.remote(url),
+    output: dest = os.path.join(target_folder, url.split("/")[-1])
+    run:
+        pathlib.Path(target_folder).mkdir(parents=True, exist_ok=True)
+        shutil.move(input.src, output.dest)
