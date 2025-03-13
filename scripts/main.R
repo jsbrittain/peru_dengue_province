@@ -86,19 +86,25 @@ if (models.baseline) {
 # Run Bayesian model
 models.bayesian <- TRUE  # Need to specify here to avoid overwriting
 if (models.bayesian) {
+  library(VGAM)
   source("province_historical_bayesian_forecasting.R")
   source("province_bayesian_forecasting.R")
 }
 
 # Run the Python models
+models.python <- FALSE
 if (models.python) {
+  p02_filename <- file.path(peru.province.out.dir, "province_02.RData")
+  load(file = p02_filename)
+
   # Pre-processing in R
   source("province_python_setup.R")
 
   # Convert the Jupyter notebook to a Python script and run
   library(reticulate)
-  notebook_path <- ""
+  notebook_path <- "scripts/forecasting/python_peru_forecast.ipynb"
   nbconvert_cmd <- sprintf("jupyter nbconvert --to script %s", notebook_path)
+  log_info("Running command: %s", nbconvert_cmd)
   system(nbconvert_cmd)
 
   # Read the result back in
@@ -110,11 +116,13 @@ if (models.python) {
 # ======================================================================================
 
 # Case ensemble
+ensembles.cases <- FALSE
 if (ensembles.cases) {
   source("province_ensemble_cases.R")
 }
 
 # Incidence ensemble
+ensembles.incidence <- FALSE
 if (ensembles.incidence) {
   source("province_ensemble_incidence.R")
 }

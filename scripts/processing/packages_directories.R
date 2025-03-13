@@ -63,6 +63,7 @@ library(ISOweek)
 library(ggpp)
 library(gghighlight)
 library(terra)
+library(VGAM)
 
 # Base directory
 peru.province.base.dir <- file.path(getwd(), "data")

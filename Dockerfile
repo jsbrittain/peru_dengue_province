@@ -103,7 +103,12 @@ RUN apt-get update && apt-get install -y python3 python3-pip python3-venv
 RUN python3 -m venv /venv
 RUN /venv/bin/pip install --upgrade pip
 RUN /venv/bin/pip install grapevne snakemake
+RUN /venv/bin/pip install jupyterlab
 ENV PATH="/venv/bin:$PATH"
+
+RUN install2.r --error \
+    VGAM \
+    reticulate
 
 # Set working directory
 WORKDIR /app

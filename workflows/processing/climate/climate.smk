@@ -8,7 +8,7 @@ rule all:
 rule tif2rds:
     input:
         infile = ancient('data/climate/{filestem}.tif'),
-        script = ancient('scripts/processing/climate.R'),
+        script = ancient('workflows/processing/climate.R'),
     output:
         outfile = 'data/climate/{filestem}.RDS',
     shell:

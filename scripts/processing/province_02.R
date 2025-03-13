@@ -152,7 +152,8 @@ if (file.exists(p02_filename)) {
     ptl_province_inla_df[, POP_DENSITY := POP / REGION_AREA_KM2]
     ptl_province_inla_df <- subset(ptl_province_inla_df, select = c(
       "PROVINCE", "REGION",
-      "TIME", "MONTH", "YEAR", "ym_cases", "DIR", "POP"
+      "TIME", "MONTH", "YEAR", "ym_cases", "DIR", "POP",
+      "DIFF_WITH_HISTORICAL_DIR_LAG", "MODIFIED_DIFF_WITH_HISTORICAL_DIR_LAG"
     ))
     ptl_province_inla_df[, POP_OFFSET := POP / 1e+05]
     setnames(ptl_province_inla_df, "ym_cases", "CASES")
@@ -273,7 +274,6 @@ if (file.exists(p02_filename)) {
 
     # Save current workspace
     log_info("Saving current workspace...")
-    p02_filename <- file.path(peru.province.out.dir, "province_02.RData")
     save.image(file = p02_filename)
     log_info("Saved current workspace to ", p02_filename)
 }

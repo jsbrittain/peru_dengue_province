@@ -16,4 +16,6 @@ docker run \
     -v "${SCRIPT_DIR}"/scripts:/app/scripts:ro \
     -v "${SCRIPT_DIR}"/workflows:/app/workflows:ro \
     -v "${SCRIPT_DIR}"/data:/app/data \
-    "${NAME}"
+    -it \
+    "${NAME}" \
+    bash

@@ -2,7 +2,7 @@
 
 set -eoux pipefail
 
-SNAKEMAKE_CORES=1
+SNAKEMAKE_CORES=${SNAKEMAKE_CORES:=1}
 snakemake --cores ${SNAKEMAKE_CORES} --snakefile workflows/datasets/proy/workflow/Snakefile
 snakemake --cores ${SNAKEMAKE_CORES} --snakefile workflows/datasets/worldclim/workflow/Snakefile
 snakemake --cores ${SNAKEMAKE_CORES} --snakefile workflows/datasets/spi6/workflow/Snakefile
