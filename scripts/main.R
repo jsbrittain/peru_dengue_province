@@ -2,7 +2,7 @@
 # Parameters
 # ======================================================================================
 
-models.baseline <- TRUE  # These get overwritten by intermediate workspace saves
+models.baseline <- FALSE  # These get overwritten by intermediate workspace saves
 models.bayesian <- FALSE
 models.python <- FALSE
 
@@ -72,7 +72,7 @@ setwd("scripts/forecasting")
 # setDT(ptl_province_inla_df)  # coerce to datatable
 
 # Run baseline model
-models.baseline <- TRUE  # Need to specify here to avoid overwriting
+models.baseline <- FALSE  # Need to specify here to avoid overwriting
 if (models.baseline) {
   source("province_baseline_forecaster.R")
   # Results plot
@@ -84,7 +84,7 @@ if (models.baseline) {
 }
 
 # Run Bayesian model
-models.bayesian <- TRUE  # Need to specify here to avoid overwriting
+models.bayesian <- FALSE  # Need to specify here to avoid overwriting
 if (models.bayesian) {
   library(VGAM)
   source("province_historical_bayesian_forecasting.R")
@@ -92,7 +92,7 @@ if (models.bayesian) {
 }
 
 # Run the Python models
-models.python <- FALSE
+models.python <- TRUE
 if (models.python) {
   p02_filename <- file.path(peru.province.out.dir, "province_02.RData")
   load(file = p02_filename)
@@ -102,13 +102,15 @@ if (models.python) {
 
   # Convert the Jupyter notebook to a Python script and run
   library(reticulate)
-  notebook_path <- "scripts/forecasting/python_peru_forecast.ipynb"
-  nbconvert_cmd <- sprintf("jupyter nbconvert --to script %s", notebook_path)
-  log_info("Running command: %s", nbconvert_cmd)
+  setwd('/app')
+  notebook_path <- "/app/scripts/forecasting/python_peru_forecast.ipynb"
+  nbconvert_cmd <- sprintf("jupyter nbconvert --to script %s --output=/app/data/python/python_peru_forecast", notebook_path)
+  log_info("Running command: ", nbconvert_cmd)
   system(nbconvert_cmd)
+  system("python /app/data/python/python_peru_forecast.py")
 
   # Read the result back in
-  source("province_python_forecasting.R")
+  source("scripts/forecasting/province_python_forecasting.R")
 }
 
 # ======================================================================================

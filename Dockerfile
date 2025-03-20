@@ -100,15 +100,16 @@ RUN R -e 'library(remotes); remotes::install_github("wmgeolab/rgeoboundaries", d
 RUN R -e 'library(remotes); remotes::install_github("zdk123/SpiecEasi", dependencies = TRUE, quiet = TRUE)'
 
 RUN apt-get update && apt-get install -y python3 python3-pip python3-venv
-RUN python3 -m venv /venv
-RUN /venv/bin/pip install --upgrade pip
-RUN /venv/bin/pip install grapevne snakemake
-RUN /venv/bin/pip install jupyterlab
+RUN python3 -m venv /venv && \
+    /venv/bin/pip install --upgrade pip && \
+    /venv/bin/pip install grapevne snakemake jupyterlab darts nixtla numpy
 ENV PATH="/venv/bin:$PATH"
 
 RUN install2.r --error \
     VGAM \
     reticulate
+
+RUN apt-get install -y vim
 
 # Set working directory
 WORKDIR /app
