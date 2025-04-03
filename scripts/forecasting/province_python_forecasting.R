@@ -1,4 +1,13 @@
-# Data
+library(logger)
+
+quantiles = c(
+  0.01, 0.025,
+  seq(0.05, 0.95, 0.05),
+  0.975, 0.99
+)
+
+# data
+log_info("load data")
 ptl_province_inla_df <- data.table(read.csv(file.path(
   peru.province.python.data.dir,
   "ptl_province_inla_df.csv"
@@ -32,6 +41,7 @@ process_python_deep_preds <- function(model_name) {
 }
 
 # HISTORICAL SARIMA ----
+log_info("historical sarima")
 raw_historical_sarima_preds_dt <- process_python_deep_preds("historical_sarima")
 ptl_province_2010_2018_data <- subset(
   ptl_province_inla_df,
@@ -114,7 +124,7 @@ historical_sarima_dir_preds_dt_for_scoring <-
   copy(historical_sarima_preds_dt)
 historical_sarima_dir_preds_dt_for_scoring[, prediction := expm1(prediction) / POP_OFFSET]
 historical_sarima_dir_preds_dt_for_scoring[, true_value := expm1(true_value) / POP_OFFSET]
-setnames(historical_sarima_dir_preds_dt, "SAMPLE", "sample")
+# setnames(historical_sarima_dir_preds_dt_for_scoring, "SAMPLE", "sample")  # JSB: Changed _dt name
 historical_sarima_dir_preds_dt_for_scoring[, location := PROVINCE]
 historical_sarima_dir_preds_dt_for_scoring <- subset(historical_sarima_dir_preds_dt_for_scoring,
   select = c(
@@ -152,9 +162,10 @@ saveRDS(quantile_historical_sarima_dir_preds_dt,
 # Historical FINETUNED TIMEGPT----
 # 95, 90, 85, 80, 75, 70,  65, 60,
 
+log_info("finetuned timegpt")
 historical_fine_tuned_timegpt_preds_dt <- data.table(process_python_deep_preds("historical_timegpt"))
 length(colnames(historical_fine_tuned_timegpt_preds_dt)[4:26])
-historical_fine_tuned_timegpt_preds_dt[, TimeGPT.lo.0 := NULL]
+#historical_fine_tuned_timegpt_preds_dt[, TimeGPT.lo.0 := NULL] #  JSB
 tmp_quantiles <- rev.default(quantiles)
 tmp_quantiles <- tmp_quantiles[which(tmp_quantiles != 0.5)]
 tmp_quantiles[1:11] <- rev.default(tmp_quantiles[1:11])
@@ -222,6 +233,8 @@ quantile_historical_fine_tuned_timegpt_preds_dt
 quantile_historical_fine_tuned_timegpt_preds_dt[, model := "historical_fine_tuned_timegpt"]
 # quantile_historical_fine_tuned_timegpt_preds_dt[, prediction:= expm1(prediction)/POP_OFFSET]
 # quantile_historical_fine_tuned_timegpt_preds_dt[, true_value:= expm1(true_value)/POP_OFFSET]
+
+## JSB: Fails here
 quantile_historical_fine_tuned_timegpt_preds_dt %>%
   score() %>%
   summarise_scores(by = c("model"))
@@ -288,8 +301,9 @@ historical_fine_tuned_timegpt_facet_plots_2018_2021
 
 # Historical No covars FINETUNED TIMEGPT (USE)----
 # 95, 90, 85, 80, 75, 70,  65, 60,
+log_info("historical no covars finetuned timegpt")
 historical_no_covars_fine_tuned_timegpt_preds_dt <- data.table(process_python_deep_preds("historical_no_covars_timegpt"))
-historical_no_covars_fine_tuned_timegpt_preds_dt[, TimeGPT.lo.0 := NULL]
+# historical_no_covars_fine_tuned_timegpt_preds_dt[, TimeGPT.lo.0 := NULL]  # JSB
 tmp_quantiles <- rev.default(quantiles)
 tmp_quantiles <- tmp_quantiles[which(tmp_quantiles != 0.5)]
 tmp_quantiles[1:11] <- rev.default(tmp_quantiles[1:11])
@@ -409,6 +423,7 @@ historical_no_covars_fine_tuned_timegpt_facet_plots_2018_2021
 
 
 # HISTORICAL TCN ----
+log_info("historical_tcn")
 raw_historical_tcn_preds_dt <- process_python_deep_preds("new_historical_tcn")
 ptl_province_2010_2018_data <- subset(
   ptl_province_inla_df,
@@ -541,6 +556,7 @@ saveRDS(quantile_historical_tcn_dir_preds_dt,
 
 # Testing Period (2018 - 2021) ----
 # NO COVARS TIMEGPT (USE) ----
+log_ingo("testing period 2018-2021, no covars timegpt")
 finetuned_no_covars_timegpt_preds_dt <- data.table(process_python_deep_preds("finetuned_no_covars_timegpt"))
 finetuned_no_covars_timegpt_preds_dt
 finetuned_no_covars_timegpt_preds_dt[, IND := seq(1, length(TimeGPT)), by = "PROVINCE"]
@@ -625,6 +641,7 @@ quantile_finetuned_no_covars_timegpt_preds_dt %>%
 
 
 # FINETUNED TIMEGPT (USE)----
+log_info("finetuned timegpt")
 fine_tuned_timegpt_preds_dt <- data.table(process_python_deep_preds("finetuned_timegpt"))
 fine_tuned_timegpt_preds_dt[, IND := seq(1, length(TimeGPT)), by = "PROVINCE"]
 ptl_province_2018_2021_data <- subset(
@@ -742,6 +759,7 @@ fine_tuned_timegpt_facet_plots_2018_2021
 
 
 # DEEPTCN (USE) ----
+log_info("deeptcn")
 raw_tcn_preds_dt <- process_python_deep_preds("tcn")
 ptl_province_2018_2021_data <- subset(
   ptl_province_inla_df,
@@ -855,6 +873,7 @@ saveRDS(quantile_tcn_dir_preds_dt,
 )
 
 # Summarise
+log_info("summarise")
 summary_tcn_preds_dt <-
   raw_tcn_preds_dt[, list(
     CI_L = quantile(prediction, probs = 0.025, na.rm = TRUE),
@@ -925,6 +944,7 @@ tcn_facet_plots_2018_2021
 
 
 # SARIMA (USE) ----
+log_info("sarima")
 raw_sarima_preds_dt <- process_python_deep_preds("arima")
 ptl_province_2018_2021_data <- subset(
   ptl_province_inla_df,
@@ -1039,6 +1059,7 @@ saveRDS(quantile_sarima_dir_preds_dt,
 
 
 # Summarise
+log_info("summarise")
 summary_sarima_preds_dt <-
   raw_sarima_preds_dt[, list(
     CI_L = quantile(prediction, probs = 0.025, na.rm = TRUE),

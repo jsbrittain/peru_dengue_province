@@ -103,13 +103,14 @@ if (models.python) {
   # Convert the Jupyter notebook to a Python script and run
   library(reticulate)
   setwd('/app')
-  notebook_path <- "/app/scripts/forecasting/python_peru_forecast.ipynb"
-  nbconvert_cmd <- sprintf("jupyter nbconvert --to script %s --output=/app/data/python/python_peru_forecast", notebook_path)
-  log_info("Running command: ", nbconvert_cmd)
-  system(nbconvert_cmd)
+  # notebook_path <- "/app/scripts/forecasting/python_peru_forecast.ipynb"
+  # nbconvert_cmd <- sprintf("jupyter nbconvert --to script %s --output=/app/data/python/python_peru_forecast", notebook_path)
+  # log_info("Running command: ", nbconvert_cmd)
+  # system(nbconvert_cmd)
   system("python /app/data/python/python_peru_forecast.py")
 
   # Read the result back in
+  source("scripts/forecasting/forecasting_funcs.R")
   source("scripts/forecasting/province_python_forecasting.R")
 }
 
