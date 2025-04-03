@@ -56,9 +56,9 @@ Run each of the independent models:
 1. Bayesian model:
    - `province_historical_bayesian_forecasting.R`
    - `province_bayesian_forecasting.R`
-1. TCN, SARIMA and TimeGPT models are run through a Python Jupyter notebook:
+1. TCN, SARIMA and TimeGPT models are run through Python (converted Jupyter notebook):
    - Preprocess the data from R: `province_python_setup.R`
-   - Run the Jupyter notebook: `python_peru_forecast.ipynb`
+   - Run the Jupyter notebook: `python_peru_forecast.ipynb` (_Note that TimeGPT models require an API key (`TIMEGPT_KEY=xxx`) from https://www.nixtla.io/ that should be located within a `.env` file in the repository root)._
    - Read the data back into R: `province_python_forecasting.R`
 
 The data can then be merged and the ensemble formed. The following scripts form the ensemble, score the model predictions, and produce visualisations for different variables:

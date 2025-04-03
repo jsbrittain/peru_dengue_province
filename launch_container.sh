@@ -13,6 +13,7 @@ mkdir -p "${SCRIPT_DIR}"/data
 # Can restrict further with "--platform linux/amd64"
 docker run \
     --platform linux/amd64 \
+    --env-file .env \
     -v "${SCRIPT_DIR}"/scripts:/app/scripts:ro \
     -v "${SCRIPT_DIR}"/workflows:/app/workflows:ro \
     -v "${SCRIPT_DIR}"/data:/app/data \
