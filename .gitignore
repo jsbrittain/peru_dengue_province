@@ -3,4 +3,5 @@ data/
 results/
 .Rproj.user
 .snakemake
+.env
 __pycache__
