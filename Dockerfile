@@ -107,9 +107,15 @@ ENV PATH="/venv/bin:$PATH"
 
 RUN install2.r --error \
     VGAM \
-    reticulate
+    reticulate \
+    runner
 
-RUN apt-get install -y vim
+RUN apt-get update && apt-get install -y \
+    vim \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN R -e 'devtools::install_github(repo="ryantibs/quantgen", subdir="quantgen")'
 
 # Set working directory
 WORKDIR /app

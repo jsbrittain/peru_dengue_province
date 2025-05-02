@@ -94,24 +94,33 @@ if (models.bayesian) {
 # Run the Python models
 models.python <- TRUE
 if (models.python) {
-  p02_filename <- file.path(peru.province.out.dir, "province_02.RData")
-  load(file = p02_filename)
+  py_filename <- file.path(peru.province.out.dir, "python_forecasts.RData")
+  if (file.exists(py_filename)) {
+    log_info("Loading previous workspace (", py_filename, ")...")
+    load(file = py_filename)
+  } else {
+    p02_filename <- file.path(peru.province.out.dir, "province_02.RData")
+    load(file = p02_filename)
 
-  # Pre-processing in R
-  source("province_python_setup.R")
+    # Pre-processing in R
+    source("province_python_setup.R")
 
-  # Convert the Jupyter notebook to a Python script and run
-  library(reticulate)
-  setwd('/app')
-  # notebook_path <- "/app/scripts/forecasting/python_peru_forecast.ipynb"
-  # nbconvert_cmd <- sprintf("jupyter nbconvert --to script %s --output=/app/data/python/python_peru_forecast", notebook_path)
-  # log_info("Running command: ", nbconvert_cmd)
-  # system(nbconvert_cmd)
-  system("python /app/data/python/python_peru_forecast.py")
+    # Convert the Jupyter notebook to a Python script and run
+    library(reticulate)
+    setwd('/app')
+    # notebook_path <- "/app/scripts/forecasting/python_peru_forecast.ipynb"
+    # nbconvert_cmd <- sprintf("jupyter nbconvert --to script %s --output=/app/data/python/python_peru_forecast", notebook_path)
+    # log_info("Running command: ", nbconvert_cmd)
+    # system(nbconvert_cmd)
+    system("python /app/data/python/python_peru_forecast.py")
 
-  # Read the result back in
-  source("scripts/forecasting/forecasting_funcs.R")
-  source("scripts/forecasting/province_python_forecasting.R")
+    # Read the result back in
+    source("scripts/forecasting/forecasting_funcs.R")
+    source("scripts/forecasting/province_python_forecasting.R")
+    log_info("Finishing running Python scripts.")
+
+    save.image(file = py_filename)
+  }
 }
 
 # ======================================================================================
@@ -121,11 +130,13 @@ if (models.python) {
 # Case ensemble
 ensembles.cases <- FALSE
 if (ensembles.cases) {
-  source("province_ensemble_cases.R")
+  setwd('/app')
+  source("scripts/forecasting/province_log_cases.R")
 }
 
 # Incidence ensemble
 ensembles.incidence <- FALSE
 if (ensembles.incidence) {
-  source("province_ensemble_incidence.R")
+  setwd('/app')
+  source("scripts/forecasting/province_dir_ensemble_scoring.R")
 }

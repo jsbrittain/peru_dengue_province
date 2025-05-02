@@ -166,14 +166,13 @@ log_info("finetuned timegpt")
 historical_fine_tuned_timegpt_preds_dt <- data.table(process_python_deep_preds("historical_timegpt"))
 length(colnames(historical_fine_tuned_timegpt_preds_dt)[4:26])
 #historical_fine_tuned_timegpt_preds_dt[, TimeGPT.lo.0 := NULL] #  JSB
-tmp_quantiles <- rev.default(quantiles)
-tmp_quantiles <- tmp_quantiles[which(tmp_quantiles != 0.5)]
-tmp_quantiles[1:11] <- rev.default(tmp_quantiles[1:11])
+tmp_quantiles <- paste0("q_", quantiles)
+tmp_quantiles[which(tmp_quantiles == "q_0.5")] = "MEDIAN"
 
 setnames(
   historical_fine_tuned_timegpt_preds_dt,
   colnames(historical_fine_tuned_timegpt_preds_dt)[4:26],
-  c("MEDIAN", paste0("q_", tmp_quantiles))
+  tmp_quantiles
 )
 # historical_fine_tuned_timegpt_preds_dt[, IND:= seq(1, length(TimeGPT)), by = "PROVINCE"]
 historical_fine_tuned_timegpt_preds_dt
@@ -304,13 +303,13 @@ historical_fine_tuned_timegpt_facet_plots_2018_2021
 log_info("historical no covars finetuned timegpt")
 historical_no_covars_fine_tuned_timegpt_preds_dt <- data.table(process_python_deep_preds("historical_no_covars_timegpt"))
 # historical_no_covars_fine_tuned_timegpt_preds_dt[, TimeGPT.lo.0 := NULL]  # JSB
-tmp_quantiles <- rev.default(quantiles)
-tmp_quantiles <- tmp_quantiles[which(tmp_quantiles != 0.5)]
-tmp_quantiles[1:11] <- rev.default(tmp_quantiles[1:11])
+tmp_quantiles <- paste0("q_", quantiles)
+tmp_quantiles[which(tmp_quantiles == "q_0.5")] = "MEDIAN"
+
 setnames(
   historical_no_covars_fine_tuned_timegpt_preds_dt,
   colnames(historical_no_covars_fine_tuned_timegpt_preds_dt)[4:26],
-  c("MEDIAN", paste0("q_", tmp_quantiles))
+  tmp_quantiles
 )
 ptl_province_2010_2018_data <- subset(
   ptl_province_inla_df,
@@ -424,19 +423,19 @@ historical_no_covars_fine_tuned_timegpt_facet_plots_2018_2021
 
 # HISTORICAL TCN ----
 log_info("historical_tcn")
-raw_historical_tcn_preds_dt <- process_python_deep_preds("new_historical_tcn")
+raw_historical_tcn_preds_dt <- process_python_deep_preds("historical_tcn")  # JSB
 ptl_province_2010_2018_data <- subset(
   ptl_province_inla_df,
   YEAR < 2018
 )
 ptl_province_2010_2018_data[, IND := seq(1, length(DIR)), by = "PROVINCE"]
 # Only have 42 data points in historical data.table
-ptl_province_2010_2018_data <- ptl_province_2010_2018_data[which(IND > (max(IND)) - 43)]
+ptl_province_2010_2018_data <- ptl_province_2010_2018_data[which(IND > (max(IND)) - 44)]  # JSB
 ptl_province_2010_2018_data[, IND := seq(1, length(DIR)), by = "PROVINCE"] # New Index to match forecast data.table
 raw_historical_tcn_preds_dt[, IND := rep(
   seq(
     1,
-    length(unique(ptl_province_2010_2018_data$TIME))
+    length(unique(ptl_province_2010_2018_data$TIME))  # JSB: 43 elements
   ),
   each = 1
 ),
@@ -556,31 +555,38 @@ saveRDS(quantile_historical_tcn_dir_preds_dt,
 
 # Testing Period (2018 - 2021) ----
 # NO COVARS TIMEGPT (USE) ----
-log_ingo("testing period 2018-2021, no covars timegpt")
+log_info("testing period 2018-2021, no covars timegpt")
 finetuned_no_covars_timegpt_preds_dt <- data.table(process_python_deep_preds("finetuned_no_covars_timegpt"))
-finetuned_no_covars_timegpt_preds_dt
+# print(finetuned_no_covars_timegpt_preds_dt)
 finetuned_no_covars_timegpt_preds_dt[, IND := seq(1, length(TimeGPT)), by = "PROVINCE"]
 finetuned_no_covars_timegpt_preds_dt[, X := NULL] # Redundant index column
-finetuned_no_covars_timegpt_preds_dt[, length(end_of_month), by = "PROVINCE"]
+# print(finetuned_no_covars_timegpt_preds_dt[, length(end_of_month), by = "PROVINCE"])
 
 finetuned_no_covars_timegpt_preds_dt <-
   merge(finetuned_no_covars_timegpt_preds_dt,
     ptl_province_2018_2021_data,
     by = c("PROVINCE", "IND", "end_of_month")
   )
-finetuned_no_covars_timegpt_preds_dt
-finetuned_no_covars_timegpt_preds_dt[, caret::R2(TimeGPT, LOG_CASES), by = "PROVINCE"]
-finetuned_no_covars_timegpt_preds_dt[, caret::MAE(TimeGPT, LOG_CASES), by = "PROVINCE"]
-finetuned_no_covars_timegpt_preds_dt[, caret::R2(TimeGPT, LOG_CASES)]
-finetuned_no_covars_timegpt_preds_dt[, caret::MAE(TimeGPT, LOG_CASES)]
+# print(finetuned_no_covars_timegpt_preds_dt)
+# print(finetuned_no_covars_timegpt_preds_dt[, caret::R2(TimeGPT, LOG_CASES), by = "PROVINCE"])
+# print(finetuned_no_covars_timegpt_preds_dt[, caret::MAE(TimeGPT, LOG_CASES), by = "PROVINCE"])
+# print(finetuned_no_covars_timegpt_preds_dt[, caret::R2(TimeGPT, LOG_CASES)])
+# print(finetuned_no_covars_timegpt_preds_dt[, caret::MAE(TimeGPT, LOG_CASES)])
+# print(finetuned_no_covars_timegpt_preds_dt[, length(which(TimeGPT.q.2 <= LOG_CASES & TimeGPT.q.97 >= LOG_CASES)) / length(TimeGPT)])
 
-finetuned_no_covars_timegpt_preds_dt[, length(which(TimeGPT.q.2 <= LOG_CASES & TimeGPT.q.97 >= LOG_CASES)) /
-  length(TimeGPT)]
-
-finetuned_no_covars_timegpt_preds_dt
+# print(finetuned_no_covars_timegpt_preds_dt)
 tmp <- copy(finetuned_no_covars_timegpt_preds_dt)
-colnames(tmp)[1:27]
-tmp <- subset(tmp, select = c(colnames(tmp)[1:30], "LOG_CASES", "POP_OFFSET"))
+# print(colnames(tmp)[1:27])
+gpt_quantiles = c(1, 2, seq(5, 95, 5), 97, 99)
+# JSB: Be explicit with column names below
+tmp <- subset(tmp,
+    select = c(
+        "PROVINCE", "IND", "end_of_month",
+        paste0("TimeGPT.q.", gpt_quantiles),
+        "YEAR", "MONTH", "TIME",
+        "LOG_CASES", "POP_OFFSET"
+    )
+)
 quantile_finetuned_no_covars_timegpt_preds_dt <- melt(tmp,
   id.vars = c(
     "PROVINCE", "IND", "TIME",
@@ -591,7 +597,8 @@ quantile_finetuned_no_covars_timegpt_preds_dt <- melt(tmp,
 )
 quantile_finetuned_no_covars_timegpt_preds_dt <- quantile_finetuned_no_covars_timegpt_preds_dt[which(quantile != "TimeGPT")]
 setnames(
-  quantile_finetuned_no_covars_timegpt_preds_dt, c("PROVINCE", "LOG_CASES", "end_of_month"),
+  quantile_finetuned_no_covars_timegpt_preds_dt,
+  c("PROVINCE", "LOG_CASES", "end_of_month"),
   c("location", "true_value", "target_end_date")
 )
 
@@ -620,10 +627,10 @@ quantile_fine_tuned_no_covars_timegpt_dir_preds_dt <- merge(quantile_fine_tuned_
   by.y = c("PROVINCE", "end_of_month")
 )
 
-quantile_fine_tuned_no_covars_timegpt_dir_preds_dt[, prediction := expm1(prediction) / POP_OFFSET]
-quantile_fine_tuned_no_covars_timegpt_dir_preds_dt[, true_value := expm1(true_value) / POP_OFFSET]
-quantile_fine_tuned_no_covars_timegpt_dir_preds_dt[which(prediction < 0), prediction := 0]
-quantile_fine_tuned_no_covars_timegpt_dir_preds_dt[which(quantile == 0.5), caret::R2(prediction, true_value)]
+# quantile_fine_tuned_no_covars_timegpt_dir_preds_dt[, prediction := expm1(prediction) / POP_OFFSET]
+# quantile_fine_tuned_no_covars_timegpt_dir_preds_dt[, true_value := expm1(true_value) / POP_OFFSET]
+# quantile_fine_tuned_no_covars_timegpt_dir_preds_dt[which(prediction < 0), prediction := 0]
+# quantile_fine_tuned_no_covars_timegpt_dir_preds_dt[which(quantile == 0.5), caret::R2(prediction, true_value)]
 
 saveRDS(quantile_fine_tuned_no_covars_timegpt_dir_preds_dt,
   file = file.path(
@@ -669,8 +676,16 @@ fine_tuned_timegpt_preds_dt[, length(which(TimeGPT.q.2 <= LOG_CASES & TimeGPT.q.
   length(TimeGPT)]
 
 tmp <- copy(fine_tuned_timegpt_preds_dt)
-colnames(tmp)[1:27]
-tmp <- subset(tmp, select = c(colnames(tmp)[1:30], "LOG_CASES", "POP_OFFSET"))
+gpt_quantiles = c(1, 2, seq(5, 95, 5), 97, 99)
+# JSB: Be explicit with column names below
+tmp <- subset(tmp,
+    select = c(
+        "PROVINCE", "IND", "end_of_month",
+        paste0("TimeGPT.q.", gpt_quantiles),
+        "YEAR", "MONTH", "TIME",
+        "LOG_CASES", "POP_OFFSET"
+    )
+)
 quantile_fine_tuned_timegpt_preds_dt <- melt(tmp,
   id.vars = c(
     "PROVINCE", "IND", "TIME",
@@ -729,31 +744,32 @@ ggplot(fine_tuned_timegpt_preds_dt) +
   facet_wrap(PROVINCE ~ ., )
 
 fine_tuned_timegpt_facet_plots_2018_2021 <-
+  fine_tuned_timegpt_preds_dt[, YEAR_DECIMAL:= YEAR + (MONTH - 1)/12]
   ggplot(fine_tuned_timegpt_preds_dt) +
-  geom_point(aes(x = YEAR_DECIMAL, y = LOG_CASES, col = "Observed")) +
-  geom_line(aes(x = YEAR_DECIMAL, y = TimeGPT, col = "Estimated")) +
-  geom_point(aes(x = YEAR_DECIMAL, y = TimeGPT, col = "Estimated")) +
-  geom_ribbon(aes(x = YEAR_DECIMAL, ymin = TimeGPT.q.2, ymax = TimeGPT.q.97), alpha = 0.18) +
-  theme_bw() +
-  xlab("Time") +
-  facet_wrap(fct_rev(PROVINCE) ~ ., scales = "free_y", nrow = 5) +
-  # facet_wrap(fct_rev(LAT_PROV_IND_FACTOR) ~ ., scales = "free_y", nrow = 5)+
-  theme(legend.position = "bottom") +
-  theme(
-    text = element_text(size = 25),
-    axis.text.x = element_text(size = 25),
-    axis.text.y = element_text(size = 25),
-    panel.grid.minor.y = element_blank(),
-    panel.grid.minor.x = element_blank(),
-    panel.grid.major.y = element_blank(),
-    panel.grid.major.x = element_blank(),
-    plot.title = element_blank(),
-    plot.subtitle = element_blank(),
-    axis.title = element_text(size = 25),
-    legend.text = element_text(size = 25) + geom_text(size = 25),
-    legend.position = "bottom",
-    legend.title = element_blank()
-  )
+    geom_point(aes(x = YEAR_DECIMAL, y = LOG_CASES, col = "Observed")) +
+    geom_line(aes(x = YEAR_DECIMAL, y = TimeGPT, col = "Estimated")) +
+    geom_point(aes(x = YEAR_DECIMAL, y = TimeGPT, col = "Estimated")) +
+    geom_ribbon(aes(x = YEAR_DECIMAL, ymin = TimeGPT.q.2, ymax = TimeGPT.q.97), alpha = 0.18) +
+    theme_bw() +
+    xlab("Time") +
+    facet_wrap(fct_rev(PROVINCE) ~ ., scales = "free_y", nrow = 5) +
+    # facet_wrap(fct_rev(LAT_PROV_IND_FACTOR) ~ ., scales = "free_y", nrow = 5)+
+    theme(legend.position = "bottom") +
+    theme(
+      text = element_text(size = 25),
+      axis.text.x = element_text(size = 25),
+      axis.text.y = element_text(size = 25),
+      panel.grid.minor.y = element_blank(),
+      panel.grid.minor.x = element_blank(),
+      panel.grid.major.y = element_blank(),
+      panel.grid.major.x = element_blank(),
+      plot.title = element_blank(),
+      plot.subtitle = element_blank(),
+      axis.title = element_text(size = 25),
+      legend.text = element_text(size = 25) + geom_text(size = 25),
+      legend.position = "bottom",
+      legend.title = element_blank()
+    )
 fine_tuned_timegpt_facet_plots_2018_2021
 
 
@@ -874,6 +890,7 @@ saveRDS(quantile_tcn_dir_preds_dt,
 
 # Summarise
 log_info("summarise")
+raw_tcn_preds_dt[, YEAR_DECIMAL := YEAR + (MONTH-1)/12]
 summary_tcn_preds_dt <-
   raw_tcn_preds_dt[, list(
     CI_L = quantile(prediction, probs = 0.025, na.rm = TRUE),
@@ -908,9 +925,10 @@ summary_tcn_preds_dt[, caret::MAE(true_DIR, DIR_MEDIAN), by = "PROVINCE"]
 summary_tcn_preds_dt[, caret::MAE(true_DIR, DIR_MEDIAN)]
 summary_tcn_preds_dt[, caret::R2(true_DIR, DIR_MEDIAN)]
 
-ggplot(summary_tcn_preds_dt) +
-  geom_point(aes(x = TIME, y = DIR_MEDIAN), color = "Prediction") +
-  geom_point(aes(x = TIME, y = true_DIR), color = "")
+# JSB: remove
+# ggplot(summary_tcn_preds_dt) +
+#   geom_point(aes(x = TIME, y = DIR_MEDIAN), color = "Prediction") +
+#   geom_point(aes(x = TIME, y = true_DIR), color = "")
 
 
 tcn_facet_plots_2018_2021 <-
@@ -1060,6 +1078,7 @@ saveRDS(quantile_sarima_dir_preds_dt,
 
 # Summarise
 log_info("summarise")
+raw_sarima_preds_dt[, YEAR_DECIMAL := YEAR + (MONTH-1)/12]
 summary_sarima_preds_dt <-
   raw_sarima_preds_dt[, list(
     CI_L = quantile(prediction, probs = 0.025, na.rm = TRUE),
@@ -1094,9 +1113,10 @@ summary_sarima_preds_dt[, caret::MAE(true_DIR, DIR_MEDIAN), by = "PROVINCE"]
 summary_sarima_preds_dt[, caret::MAE(true_DIR, DIR_MEDIAN)]
 summary_sarima_preds_dt[, caret::R2(true_DIR, DIR_MEDIAN)]
 
-ggplot(summary_sarima_preds_dt) +
-  geom_point(aes(x = TIME, y = DIR_MEDIAN), color = "Prediction") +
-  geom_point(aes(x = TIME, y = true_DIR), color = "")
+# JSB: Remove
+# ggplot(summary_sarima_preds_dt) +
+#   geom_point(aes(x = TIME, y = DIR_MEDIAN), color = "Prediction") +
+#   geom_point(aes(x = TIME, y = true_DIR), color = "")
 
 
 sarima_facet_plots_2018_2021 <-
