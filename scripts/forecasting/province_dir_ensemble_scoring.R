@@ -1,4 +1,7 @@
 # Script for DIR scoring + outbreak assessment
+source("scripts/processing/packages_directories.R")
+# library(quantgen)
+library(logger)
 
 
 ptl_province_inla_df <- data.table(read.csv(file.path(
@@ -10,7 +13,7 @@ ptl_province_2018_2021_data <- subset(
   YEAR >= 2018
 )
 ptl_province_2018_2021_data[, IND := seq(1, length(DIR)), by = "PROVINCE"]
-colnames(quantile_tcn_preds_dt)
+# colnames(quantile_tcn_preds_dt)  # JSB
 scoring_columns <- c(
   "location", "true_value", "model", "target_end_date",
   "quantile", "prediction"
@@ -63,18 +66,20 @@ climate_2018_2021_forecast_quantile_dt <- subset(climate_2018_2021_forecast_quan
 
 # SARIMA Model Forecasts ----
 sarima_2010_2018_forecast_quantile_dt <- readRDS(file = file.path(
-  peru.province.out.dir,
-  paste0("sarima_2010_2018_forecast_quantile_dt.RDS")
+  peru.province.python.out.dir,
+  # paste0("sarima_2010_2018_forecast_quantile_dt.RDS")  # JSB
+  paste0("quantile_historical_sarima_preds_dt.RDS")
 ))
 sarima_2018_2021_forecast_quantile_dt <- readRDS(file = file.path(
-  peru.province.out.dir,
-  paste0("sarima_2018_2021_forecast_quantile_dt.RDS")
+  peru.province.python.out.dir,
+  # paste0("sarima_2018_2021_forecast_quantile_dt.RDS")  # JSB
+  paste0("quantile_sarima_preds_dt.RDS")  # JSB
 ))
 sarima_2018_2021_forecast_quantile_dt <- merge(sarima_2018_2021_forecast_quantile_dt,
   subset(ptl_province_2018_2021_data, select = c("TIME", "PROVINCE", "end_of_month")),
   by = c("TIME", "PROVINCE")
 )
-sarima_2018_2021_forecast_quantile_dt
+# print(sarima_2018_2021_forecast_quantile_dt)
 setnames(sarima_2018_2021_forecast_quantile_dt, c("PROVINCE", "end_of_month"), c("location", "target_end_date"))
 sarima_2018_2021_forecast_quantile_dt <- subset(sarima_2018_2021_forecast_quantile_dt,
   select = scoring_columns
