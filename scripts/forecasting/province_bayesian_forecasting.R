@@ -95,20 +95,20 @@ saveRDS(climate_2018_2021_forecast_quantile_dt,
 )
 
 
-# Eyeball results
-climate_2018_2021_forecast_quantile_dt[quantile %in% seq(0.1, 0.9, 0.1), ] %>%
-  pit(by = c("model")) %>%
-  plot_pit() +
-  facet_wrap(model ~ .)
-climate_2018_2021_forecast_quantile_dt %>%
-  score() %>%
-  summarise_scores(by = c("model", "range")) %>%
-  plot_interval_coverage()
-
-climate_2018_2021_forecast_quantile_dt %>%
-  score() %>%
-  summarise_scores(by = c("model", "quantile")) %>%
-  plot_quantile_coverage()
+# # Eyeball results
+# climate_2018_2021_forecast_quantile_dt[quantile %in% seq(0.1, 0.9, 0.1), ] %>%
+#   pit(by = c("model")) %>%
+#   plot_pit() +
+#   facet_wrap(model ~ .)
+# climate_2018_2021_forecast_quantile_dt %>%
+#   score() %>%
+#   summarise_scores(by = c("model", "range")) %>%
+#   plot_interval_coverage()
+# 
+# climate_2018_2021_forecast_quantile_dt %>%
+#   score() %>%
+#   summarise_scores(by = c("model", "quantile")) %>%
+#   plot_quantile_coverage()
 
 # LOG CASES (Primary Focus) ----
 climate_dir_pred.dt_2018_2021 <- readRDS(file = file.path(peru.province.inla.data.out.dir, "climate_dir.pred.dt_2018_2021.RDS"))
@@ -130,21 +130,21 @@ climate_2018_2021_log_cases_quantile_dt <-
 saveRDS(climate_2018_2021_log_cases_quantile_dt,
   file = file.path(peru.province.inla.data.out.dir, "climate_2018_2021_log_cases_quantile_dt.RDS")
 )
-climate_2018_2021_log_cases_quantile_dt %>%
-  score() %>%
-  summarise_scores(by = c("model"))
-climate_2018_2021_log_cases_quantile_dt
-
-climate_2018_2021_log_cases_quantile_dt[quantile %in% seq(0.1, 0.9, 0.1), ] %>%
-  pit(by = c("model")) %>%
-  plot_pit() +
-  facet_wrap(model ~ .)
-climate_2018_2021_log_cases_quantile_dt %>%
-  score() %>%
-  summarise_scores(by = c("model", "range")) %>%
-  plot_interval_coverage()
-
-climate_2018_2021_log_cases_quantile_dt %>%
-  score() %>%
-  summarise_scores(by = c("model", "quantile")) %>%
-  plot_quantile_coverage()
+# climate_2018_2021_log_cases_quantile_dt %>%
+#   score() %>%
+#   summarise_scores(by = c("model"))
+# climate_2018_2021_log_cases_quantile_dt
+# 
+# climate_2018_2021_log_cases_quantile_dt[quantile %in% seq(0.1, 0.9, 0.1), ] %>%
+#   pit(by = c("model")) %>%
+#   plot_pit() +
+#   facet_wrap(model ~ .)
+# climate_2018_2021_log_cases_quantile_dt %>%
+#   score() %>%
+#   summarise_scores(by = c("model", "range")) %>%
+#   plot_interval_coverage()
+# 
+# climate_2018_2021_log_cases_quantile_dt %>%
+#   score() %>%
+#   summarise_scores(by = c("model", "quantile")) %>%
+#   plot_quantile_coverage()

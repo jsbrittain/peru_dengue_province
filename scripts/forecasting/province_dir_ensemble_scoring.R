@@ -1,8 +1,16 @@
 # Script for DIR scoring + outbreak assessment
 source("scripts/processing/packages_directories.R")
-# library(quantgen)
+source('scripts/forecasting/forecasting_funcs.R')
+library(quantgen)
 library(logger)
 
+
+# Quantiles
+quantiles <- c(
+  0.01, 0.025,
+  seq(0.05, 0.95, 0.05),
+  0.975, 0.99
+)
 
 ptl_province_inla_df <- data.table(read.csv(file.path(
   peru.province.python.data.dir,
@@ -64,6 +72,22 @@ climate_2018_2021_forecast_quantile_dt <- subset(climate_2018_2021_forecast_quan
   select = scoring_columns
 )
 
+# JSB - load ptl
+ptl_province_inla_df <- data.table(read.csv(file.path(
+  peru.province.python.data.dir,
+  "ptl_province_inla_df.csv"
+)))
+ptl_province_2018_2021_data <- subset(
+  ptl_province_inla_df,
+  YEAR >= 2018
+)
+ptl_province_2018_2021_data[, IND := seq(1, length(DIR)), by = "PROVINCE"]
+ptl_province_2010_2018_data <- subset(
+    ptl_province_inla_df,
+    YEAR < 2018
+)
+ptl_province_2010_2018_data[, IND := seq(1, length(DIR)), by = "PROVINCE"]
+
 # SARIMA Model Forecasts ----
 sarima_2010_2018_forecast_quantile_dt <- readRDS(file = file.path(
   peru.province.python.out.dir,
@@ -77,10 +101,10 @@ sarima_2018_2021_forecast_quantile_dt <- readRDS(file = file.path(
 ))
 sarima_2018_2021_forecast_quantile_dt <- merge(sarima_2018_2021_forecast_quantile_dt,
   subset(ptl_province_2018_2021_data, select = c("TIME", "PROVINCE", "end_of_month")),
-  by = c("TIME", "PROVINCE")
+  by.x = c("location", "target_end_date"), by.y = c("PROVINCE", "end_of_month")
 )
 # print(sarima_2018_2021_forecast_quantile_dt)
-setnames(sarima_2018_2021_forecast_quantile_dt, c("PROVINCE", "end_of_month"), c("location", "target_end_date"))
+# setnames(sarima_2018_2021_forecast_quantile_dt, c("PROVINCE", "end_of_month"), c("location", "target_end_date"))
 sarima_2018_2021_forecast_quantile_dt <- subset(sarima_2018_2021_forecast_quantile_dt,
   select = scoring_columns
 )
@@ -91,21 +115,21 @@ quantile_sarima_dir_preds_dt <- readRDS(file = file.path(
 ))
 
 # Random Forest Model Forecasts (should use predict quantiles)----
-quantiles_random_forest_dir.pred_2018_2021 <-
-  readRDS(file = file.path(
-    peru.province.xgb.out.dir,
-    paste0("quantiles_random_forest_dir.pred_2018_2021.RDS")
-  ))
-
-quantiles_random_forest_dir.pred_2018_2021 <- merge(quantiles_random_forest_dir.pred_2018_2021,
-  subset(ptl_province_2018_2021_data, select = c("TIME", "PROVINCE", "end_of_month")),
-  by = c("TIME", "PROVINCE")
-)
-quantiles_random_forest_dir.pred_2018_2021
-setnames(quantiles_random_forest_dir.pred_2018_2021, c("PROVINCE", "end_of_month"), c("location", "target_end_date"))
-quantiles_random_forest_dir.pred_2018_2021 <- subset(quantiles_random_forest_dir.pred_2018_2021,
-  select = scoring_columns
-)
+# quantiles_random_forest_dir.pred_2018_2021 <-
+#   readRDS(file = file.path(
+#     peru.province.xgb.out.dir,
+#     paste0("quantiles_random_forest_dir.pred_2018_2021.RDS")
+#   ))
+# 
+# quantiles_random_forest_dir.pred_2018_2021 <- merge(quantiles_random_forest_dir.pred_2018_2021,
+#   subset(ptl_province_2018_2021_data, select = c("TIME", "PROVINCE", "end_of_month")),
+#   by = c("TIME", "PROVINCE")
+# )
+# quantiles_random_forest_dir.pred_2018_2021
+# setnames(quantiles_random_forest_dir.pred_2018_2021, c("PROVINCE", "end_of_month"), c("location", "target_end_date"))
+# quantiles_random_forest_dir.pred_2018_2021 <- subset(quantiles_random_forest_dir.pred_2018_2021,
+#   select = scoring_columns
+# )
 
 # Baseline
 quantile_baseline_dir.pred_dt_2018_2021 <-
@@ -113,6 +137,7 @@ quantile_baseline_dir.pred_dt_2018_2021 <-
     peru.province.out.dir,
     paste0("quantile_baseline_dir.pred_dt_2018_2021.RDS")
   ))
+quantile_baseline_dir.pred_dt_2018_2021[, target_end_date := as.character(target_end_date)]  # JSB
 
 quantile_dir_components_dt <- rbind(
   quantile_fine_tuned_timegpt_dir_preds_dt,
@@ -142,32 +167,32 @@ quantile_dir_components_plus_ensembles_dt_scores <- quantile_dir_components_plus
   score() %>%
   summarise_scores(by = c("model"))
 quantile_dir_components_plus_ensembles_dt_scores[order(interval_score)]
-quantile_log_cases_components_plus_ensembles_dt_scores[order(interval_score)]
 tmp <- process_summary_predictions(summary_predictions(quantile_dir_components_plus_ensembles_dt))
-tmp[order(COVERAGE)]
 quantile_dir_components_plus_ensembles_dt_performance <-
   process_quantile_predictions(quantile_dir_components_plus_ensembles_dt)
 quantile_dir_components_plus_ensembles_dt_performance[order(r2, decreasing = TRUE)]
-quantile_dir_components_plus_ensembles_dt %>%
-  score() %>%
-  summarise_scores(by = c("model", "quantile")) %>%
-  plot_quantile_coverage() + geom_line(aes(y = quantile_coverage), linewidth = 1.5, alpha = 0.6) +
-  facet_wrap(model ~ ., ) +
-  theme(
-    text = element_text(size = 32),
-    axis.text.x = element_text(size = 32),
-    axis.text.y = element_text(size = 32),
-    panel.grid.minor.y = element_blank(),
-    panel.grid.minor.x = element_blank(),
-    panel.grid.major.y = element_blank(),
-    panel.grid.major.x = element_blank(),
-    plot.title = element_text(face = "bold", hjust = 0.5),
-    plot.subtitle = element_blank(),
-    axis.title = element_text(size = 32),
-    legend.text = element_text(size = 24),
-    legend.position = "bottom"
-  ) +
-  guides(color = guide_legend("Model"))
+
+# Plot...
+# quantile_dir_components_plus_ensembles_dt %>%
+#   score() %>%
+#   summarise_scores(by = c("model", "quantile")) %>%
+#   plot_quantile_coverage() + geom_line(aes(y = quantile_coverage), linewidth = 1.5, alpha = 0.6) +
+#   facet_wrap(model ~ ., ) +
+#   theme(
+#     text = element_text(size = 32),
+#     axis.text.x = element_text(size = 32),
+#     axis.text.y = element_text(size = 32),
+#     panel.grid.minor.y = element_blank(),
+#     panel.grid.minor.x = element_blank(),
+#     panel.grid.major.y = element_blank(),
+#     panel.grid.major.x = element_blank(),
+#     plot.title = element_text(face = "bold", hjust = 0.5),
+#     plot.subtitle = element_blank(),
+#     axis.title = element_text(size = 32),
+#     legend.text = element_text(size = 24),
+#     legend.position = "bottom"
+#   ) +
+#   guides(color = guide_legend("Model"))
 
 
 # Trained Ensembles ----
@@ -190,7 +215,7 @@ setkeyv(input_quantile_dt, c("location", "model", "target_end_date", "quantile")
 # prediction_indices
 # model_indices <- sort(unique(pred_points_dt$model))
 # model_indices
-# number_testing_dates = length(unique(pred_points_dt$target_end_date))
+number_testing_dates = length(unique(pred_points_dt$target_end_date))
 
 
 # Train ensemble using quantile loss with iterative updating to reflect
@@ -219,11 +244,12 @@ iteratively_train_quantile_ensemble <- function(quantiles,
   ovr_model_weights_dt <- NULL
 
   for (t in 1:number_testing_dates) {
+    print(paste(t, " of ", number_testing_dates))
     new_date <- testing_dates[t]
     # number of historical pred points
     tmp_true_data <- subset(true_data, end_of_month <= new_date)
     testing_input_quantile_dt <- subset(input_quantile_dt, target_end_date == new_date)
-    print(testing_input_quantile_dt)
+    # print(testing_input_quantile_dt)
     historical_input_quantile_dt <- rbind(
       historical_input_quantile_dt,
       testing_input_quantile_dt
@@ -241,7 +267,7 @@ iteratively_train_quantile_ensemble <- function(quantiles,
       num_ensemble_components,
       num_quantile_levels
     ))
-    print(dim(qarr))
+    # print(dim(qarr))
     # print(dim(qarr))
     prediction_indices <- sort(unique(historical_input_quantile_dt$IND))
     for (i in 1:num_pred_points) {
@@ -296,7 +322,9 @@ iteratively_trained_weights_dir_dt <- iteratively_train_quantile_ensemble(
 saveRDS(iteratively_trained_weights_dir_dt,
   file = file.path(peru.province.out.dir, "iteratively_trained_weights_dir_dt.RDS")
 )
-iteratively_trained_weights_dir_dt <- readRDS(file = file.path(peru.province.out.dir, "iteratively_trained_weights_dir_dt.RDS"))
+iteratively_trained_weights_dir_dt <- readRDS(
+    file = file.path(peru.province.out.dir, "iteratively_trained_weights_dir_dt.RDS")
+)
 iteratively_trained_weights_dir_dt
 
 
@@ -336,53 +364,9 @@ weighted_quantile_dir_forecasts_2018_2021_dt <-
 weighted_quantile_dir_forecasts_2018_2021_dt[which(quantile == 0.5), caret::R2(prediction, true_value)]
 weighted_quantile_dir_forecasts_2018_2021_dt[which(quantile == 0.5), caret::MAE(prediction, true_value)]
 weighted_quantile_dir_forecasts_2018_2021_dt[, model := "pinball_trained_ensemble"]
-weighted_quantile_dir_forecasts_2018_2021_dt %>%
-  score() %>%
-  summarise_scores(by = c("model"))
 process_quantile_predictions(weighted_quantile_dir_forecasts_2018_2021_dt)
 # Ensembles - iteratively trained, province-level trained, no covars (Mean), no covars (median), all median
 # Covariate-dependent
-
-
-
-# WIS Assessment over time ----
-wis_expanding_dir_results <- wis_expanding_window_over_time(quantile_dir_components_dt,
-  times = unique(quantile_dir_components_dt$target_end_date)
-)
-
-wis_expanding_dir_results_spatially_homoegenous <- wis_expanding_dir_results[[1]]
-wis_expanding_dir_results_space_dependent <- wis_expanding_dir_results[[2]]
-wis_expanding_dir_results_space_dependent
-# 1) Iterative WIS-based weighting (Spatially homogeneous)
-# Add equal weight for first month
-tmp <- subset(
-  wis_expanding_dir_results_spatially_homoegenous,
-  effective_time == min(effective_time)
-)
-tmp[, weight := 1 / length(unique(model))]
-tmp[, effective_time := min(quantile_log_cases_components_dt$target_end_date)]
-tmp
-wis_expanding_dir_results_spatially_homoegenous <- rbind(tmp, wis_expanding_dir_results_spatially_homoegenous)
-wis_expanding_dir_results_spatially_homoegenous[, model_factor := factor(model)]
-# wis_expanding_dir_results_spatially_homoegenous[, effective_time:= as.Date(effective_time)]
-wis_expanding_dir_results_spatially_homoegenous[, target_end_date := as.Date(effective_time)]
-wis_expanding_dir_results_spatially_homoegenous$weight
-ggplot(wis_expanding_dir_results_spatially_homoegenous) +
-  geom_line(aes(x = target_end_date, y = interval_score, color = model_factor)) +
-  theme_bw() +
-  theme(legend.position = "bottom")
-
-
-
-
-
-ggplot(
-  wis_expanding_dir_results_space_dependent,
-  aes(x = effective_time, y = interval_score, color = model)
-) +
-  geom_line() +
-  theme_bw() +
-  facet_wrap(location ~ ., scales = "free_y")
 
 
 
@@ -434,22 +418,6 @@ quantile_historical_tcn_dir_preds_dt <- readRDS(file = file.path(
   "quantile_historical_tcn_dir_preds_dt.RDS"
 ))
 setnames(quantile_historical_tcn_dir_preds_dt, "end_of_month", "target_end_date")
-# Random forest
-quantiles_random_forest_dir.pred_2010_2018 <-
-  readRDS(file = file.path(
-    peru.province.xgb.out.dir,
-    paste0("quantiles_random_forest_dir.pred_2010_2018.RDS")
-  ))
-quantiles_random_forest_dir.pred_2010_2018 <- merge(quantiles_random_forest_dir.pred_2010_2018,
-  subset(ptl_province_2010_2018_data, select = c("TIME", "PROVINCE", "end_of_month")),
-  by = c("TIME", "PROVINCE")
-)
-quantiles_random_forest_dir.pred_2010_2018
-
-setnames(quantiles_random_forest_dir.pred_2010_2018, c("PROVINCE", "end_of_month"), c("location", "target_end_date"))
-quantiles_random_forest_dir.pred_2010_2018 <- subset(quantiles_random_forest_dir.pred_2010_2018,
-  select = scoring_columns
-)
 
 
 # SARIMA
@@ -466,6 +434,7 @@ quantile_baseline_dir.pred_dt_2010_2018 <- readRDS(file = file.path(
   peru.province.out.dir,
   "quantile_baseline_dir.pred_dt_2010_2018.RDS"
 ))
+quantile_baseline_dir.pred_dt_2010_2018[, target_end_date := as.character(target_end_date)]
 quantile_baseline_dir.pred_dt_2010_2018
 
 historical_quantile_dir_components_dt <- rbind(
@@ -508,73 +477,94 @@ historical_quantile_dir_components_plus_ensembles_dt_scores[order(interval_score
 historical_quantile_dir_components_plus_ensembles_dt_performance <-
   process_quantile_predictions(historical_quantile_dir_components_plus_ensembles_dt)
 historical_quantile_dir_components_plus_ensembles_dt_performance[order(r2, decreasing = TRUE)]
-# EW-Mean
 
-# Median
-
-# No covars (Mean)
-
-# Climate+SARIMA+
 
 
 # Trained Approaches ----
-runner_trained_ensemble_weights_by_province_quantile_log_cases_dt
-tmp <- copy(runner_trained_ensemble_weights_by_province_quantile_log_cases_dt)
-tmp[, target_end_date := Lag(target_end_date, -1), by = c("model", "location")]
-tmp
-quantile_dir_components_dt
-input_quantile_dt <- merge(quantile_dir_components_dt,
-  tmp,
-  by = c("model", "location", "target_end_date")
+
+# tmp <- copy(weighted_quantile_dir_forecasts_2018_2021_dt)
+# tmp[, target_end_date := Lag(target_end_date, -1), by = c("model", "location")]
+# tmp
+# quantile_dir_components_dt
+# input_quantile_dt <- merge(quantile_dir_components_dt,
+#   tmp,
+#   by = c("model", "location", "target_end_date")
+# )
+# input_quantile_dt
+# input_quantile_dt[, true_value := round(true_value, digits = 8)]
+# input_quantile_dt
+# trained_ensemble_by_province_quantile_dir_forecasts_2018_2021_dt <-
+#   input_quantile_dt[, list(
+#     prediction = sum(weights * prediction),
+#     true_value = unique(true_value)
+#   ),
+#   by = c("location", "quantile", "target_end_date")
+#   ]
+# trained_ensemble_by_province_quantile_dir_forecasts_2018_2021_dt[which(quantile == 0.5), caret::R2(prediction, true_value)]
+# trained_ensemble_by_province_quantile_dir_forecasts_2018_2021_dt[which(quantile == 0.5), caret::MAE(prediction, true_value)]
+# trained_ensemble_by_province_quantile_dir_forecasts_2018_2021_dt[, model := "pinball_trained_ensemble_by_province"]
+
+num_pred_points <- nrow(ptl_province_2018_2021_data)
+input_quantile_dt <- copy(quantile_dir_components_dt)
+setkeyv(input_quantile_dt, c("location", "model", "target_end_date", "quantile"))
+num_ensemble_components <- length(unique(input_quantile_dt$model))
+num_quantile_levels <- length(quantiles)
+pred_points_dt <- unique(subset(input_quantile_dt,
+  select = c("location", "model", "target_end_date")
+))
+setkeyv(pred_points_dt, c("model", "location", "target_end_date"))
+pred_points_dt[, IND := seq(1, length(target_end_date)), by = "model"]
+pred_points_dt
+input_quantile_dt <- merge(input_quantile_dt, pred_points_dt, by = c("model", "location", "target_end_date"))
+setkeyv(input_quantile_dt, c("location", "model", "target_end_date", "quantile"))
+number_testing_dates = length(unique(pred_points_dt$target_end_date))
+
+trained_ensemble_by_province_quantile_dir_forecasts_2018_2021_dt <- iteratively_train_quantile_ensemble_by_province(
+  quantiles = quantiles,
+  number_testing_dates = number_testing_dates,
+  input_quantile_dt = input_quantile_dt,
+  pred_points_dt,
+  historical_input_quantile_dt = historical_quantile_dir_components_dt,
+  ptl_province_2018_2021_data,
+  data_field="DIR"
 )
-input_quantile_dt
-input_quantile_dt[, true_value := round(true_value, digits = 8)]
-input_quantile_dt
-trained_ensemble_by_province_quantile_dir_forecasts_2018_2021_dt <-
-  input_quantile_dt[, list(
-    prediction = sum(weights * prediction),
-    true_value = unique(true_value)
-  ),
-  by = c("location", "quantile", "target_end_date")
-  ]
-trained_ensemble_by_province_quantile_dir_forecasts_2018_2021_dt[which(quantile == 0.5), caret::R2(prediction, true_value)]
-trained_ensemble_by_province_quantile_dir_forecasts_2018_2021_dt[which(quantile == 0.5), caret::MAE(prediction, true_value)]
-trained_ensemble_by_province_quantile_dir_forecasts_2018_2021_dt[, model := "pinball_trained_ensemble_by_province"]
+trained_ensemble_by_province_quantile_dir_forecasts_2018_2021_dt
 
 
 
-tmp <- copy(runner_trained_ensemble_weights_quantile_log_cases_dt)
-tmp[, target_end_date := Lag(target_end_date, -1), by = c("model")]
-tmp
-quantile_dir_components_dt
-input_quantile_dt <- merge(quantile_dir_components_dt,
-  tmp,
-  by = c("model", "target_end_date")
-)
-input_quantile_dt
-input_quantile_dt[, true_value := round(true_value, digits = 8)]
-input_quantile_dt
-trained_ensemble_quantile_dir_forecasts_2018_2021_dt <-
-  input_quantile_dt[, list(
-    prediction = sum(weights * prediction),
-    true_value = unique(true_value)
-  ),
-  by = c("location", "quantile", "target_end_date")
-  ]
-trained_ensemble_quantile_dir_forecasts_2018_2021_dt[which(quantile == 0.5), caret::R2(prediction, true_value)]
-trained_ensemble_quantile_dir_forecasts_2018_2021_dt[which(quantile == 0.5), caret::MAE(prediction, true_value)]
-trained_ensemble_quantile_dir_forecasts_2018_2021_dt[, model := "pinball_trained_ensemble"]
-
-
-trained_ensemble_quantile_dir_forecasts_2018_2021_dt[, target_end_date := as.Date(target_end_date)]
-trained_ensemble_by_province_quantile_dir_forecasts_2018_2021_dt[, target_end_date := as.Date(target_end_date)]
-quantile_dir_components_plus_ensembles_dt[, target_end_date := as.Date(target_end_date)]
-historical_quantile_dir_components_plus_ensembles_dt[, target_end_date := as.Date(target_end_date)]
+trained_ensemble_quantile_dir_forecasts_2018_2021_dt <- copy(weighted_quantile_dir_forecasts_2018_2021_dt)
+# tmp <- copy(weighted_quantile_dir_forecasts_2018_2021_dt)
+# tmp[, target_end_date := Lag(target_end_date, -1), by = c("model")]
+# tmp
+# quantile_dir_components_dt
+# input_quantile_dt <- merge(quantile_dir_components_dt,
+#   tmp,
+#   by = c("model", "target_end_date")
+# )
+# input_quantile_dt
+# input_quantile_dt[, true_value := round(true_value, digits = 8)]
+# input_quantile_dt
+# trained_ensemble_quantile_dir_forecasts_2018_2021_dt <-
+#   input_quantile_dt[, list(
+#     prediction = sum(weights * prediction),
+#     true_value = unique(true_value)
+#   ),
+#   by = c("location", "quantile", "target_end_date")
+#   ]
+# trained_ensemble_quantile_dir_forecasts_2018_2021_dt[which(quantile == 0.5), caret::R2(prediction, true_value)]
+# trained_ensemble_quantile_dir_forecasts_2018_2021_dt[which(quantile == 0.5), caret::MAE(prediction, true_value)]
+# trained_ensemble_quantile_dir_forecasts_2018_2021_dt[, model := "pinball_trained_ensemble"]
+# 
+# trained_ensemble_quantile_dir_forecasts_2018_2021_dt[, target_end_date := as.Date(target_end_date)]
+# trained_ensemble_by_province_quantile_dir_forecasts_2018_2021_dt[, target_end_date := as.Date(target_end_date)]
+# quantile_dir_components_plus_ensembles_dt[, target_end_date := as.Date(target_end_date)]
+# historical_quantile_dir_components_plus_ensembles_dt[, target_end_date := as.Date(target_end_date)]
 
 
 quantile_dir_components_plus_ensembles_dt <- rbind(
   quantile_dir_components_plus_ensembles_dt,
-  trained_ensemble_by_province_quantile_dir_forecasts_2018_2021_dt,
+  # JSB: Need to make predictions with provinces (above) to add here
+  # trained_ensemble_by_province_quantile_dir_forecasts_2018_2021_dt,
   trained_ensemble_quantile_dir_forecasts_2018_2021_dt
 )
 
