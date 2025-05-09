@@ -1,31 +1,74 @@
 # SCRIPT FOR SETTING UP SURVEILLANCE, DEMOGRAPHIC, AND CLIMATE DATA
+library(sf)
 library(logger)
+library(data.table)
 library(stringr)
 library(ISOweek)
+library(dplyr)
+library(readxl)
+library(zoo)
+library(terra)
+library(raster)
+library(tsModel)
+library(mapsPERU)
+
+spi_file_name_func <- function(year) {
+    return(file.path(peru.spi6.in.dir, paste0("spg06_m_wld_", year, "0101_", year,
+        "1201_m.nc")))
+}
+
+# From package_directories
+peru.province.base.dir <- file.path(getwd(), "data")
+peru.case_data.in.dir <- file.path(peru.province.base.dir, "cases")
+peru.province.data.dir <- file.path(peru.province.base.dir, "shapefiles")
+peru.spi6.in.dir <- file.path(peru.province.base.dir, "spi6")
+peru.province.out.dir <- file.path(peru.province.base.dir, "output")
+
+# District boundaries
+peru_district_boundaries2 <- st_read(file.path(peru.province.data.dir, "per_admbnda_adm2_ign_20200714.shp"))
+piura_tumbes_lambayeque <- c("Piura", "Tumbes", "Lambayeque")
+piura_tumbes_lambayeque_boundaries <- subset(peru_district_boundaries2, peru_district_boundaries2$ADM1_ES %in%
+    piura_tumbes_lambayeque)
 
 # Replace this logic with Snakemake / workflow manager
 p01_filename <- file.path(peru.province.out.dir, "province_01.RData")
-if (file.exists(p01_filename)) {
+if (FALSE) { # file.exists(p01_filename)) {
     log_info("Loading previous workspace (", p01_filename, ")...")
     load(file = p01_filename)
 } else {
 
     p01a_filename <- file.path(peru.province.out.dir, "province_01a.RData")
-    if (file.exists(p01a_filename)) {
+    if (FALSE) { # file.exists(p01a_filename)) {
         log_info("Loading previous workspace (", p01a_filename, ")...")
         load(file = p01a_filename)
     } else {
         # READ IN RAW CASES ----
+        # 2010_2021_cases_full_data.csv
+        # columns = (
+        #  Departamnento = Department (Admin-1) {23},
+        #  Provincia = Province (Admin-2) {124},
+        #  Distrito = District (Admin-3) {584},
+        #  Ano = Year [2010-2023],
+        #  Semana.actualizaciónn = Update week [19],
+        #  Eventos.o.daños = Events or cases ['Dengue']
+        #  Semana = Epidemiological week [1-53],
+        #  Sexo = Sex [Femenino, Masculino]
+        #  Tipo.de.diagnóstico = Type of diagnosis [Confirmados, Probables],
+        #  DIS = ? [1]
+        # )
+        # 492,597 rows
         cases_file <- file.path(peru.case_data.in.dir, "2010_2021_cases_full_data.csv")
         log_info("Read in raw cases: ", cases_file)
         raw_peru_cases <- data.table(read.csv(cases_file))
 
         # Probable vs Confirmed Analysis----
 
+        # Count total cases per department, dropping some columns, CASE_TYPE=prob/confirmed
         department_probable_confirmed_cases <- raw_peru_cases[, list(TOTAL_CASES = length(Sexo)),
             by = c("Provincia", "Departamnento", "Semana", "Ano", "Tipo.de.diagnóstico")]
         setnames(department_probable_confirmed_cases, colnames(department_probable_confirmed_cases),
             c("PROVINCE", "REGION", "WEEK", "YEAR", "CASE_TYPE", "TOTAL_CASES"))
+        # Title-case provinces, regions; correct names
         department_probable_confirmed_cases[, PROVINCE := str_to_title(PROVINCE)]
         department_probable_confirmed_cases[, REGION := str_to_title(REGION)]
         department_probable_confirmed_cases[which(REGION == "Madre De Dios"), REGION :=
@@ -37,7 +80,7 @@ if (file.exists(p01_filename)) {
         department_probable_confirmed_cases[which(REGION == "Huanuco"), REGION :=
             "Huánuco"]
 
-        # Remove weeks with non-assigned cases
+        # Remove weeks where cases do not have an assigned province/region
         log_info("Remove weeks with non-assigned cases")
         department_probable_confirmed_cases <- department_probable_confirmed_cases[which(PROVINCE !=
             ""), ]
@@ -53,25 +96,22 @@ if (file.exists(p01_filename)) {
         # PROVINCE-YEAR-week-case_type
         all_combinations <- CJ(PROVINCE = province_year_comb$PROVINCE, CASE_TYPE = case_types$V1,
             YEAR = province_year_comb$YEAR, WEEK = all_weeks$week)
-        all_combinations <- unique(all_combinations)
+        # JSB :: previous table has 94 million rows and is a bit slow, and reduces to
+        # 179k rows below - can we come up with a more efficient method?
+        all_combinations <- unique(all_combinations)  # 179k rows
 
         # Merge the original data.table with the full combinations to include
-        # missing weeks
+        # missing weeks; create an ISO Date column
         log_info("Merge the original data.table with the full combinations to include missing weeks")
         filled_dt <- merge(all_combinations, department_probable_confirmed_cases,
             by = c("PROVINCE", "YEAR", "WEEK", "CASE_TYPE"), all.x = TRUE, all.y = TRUE)
         filled_dt[, YEAR_WEEK := paste0(YEAR, "-W", WEEK, "-1")]
         filled_dt[which(WEEK < 10), YEAR_WEEK := paste0(YEAR, "-W0", WEEK, "-1")]
-        filled_dt[, REPORTED_DATE := ISOweek2date(filled_dt$YEAR_WEEK)]
-        filled_dt[, MONTH := substr(REPORTED_DATE, 1, 7)]
-        filled_dt
-        print(filled_dt)
+        filled_dt[, REPORTED_DATE := ISOweek2date(filled_dt$YEAR_WEEK)]  # class=Date
+        filled_dt[, MONTH := substr(REPORTED_DATE, 1, 7)]  # trim day(date), class=char
 
         # Create Monthly dt
         log_info("Create Monthly dt")
-        monthly_department_probable_confirmed_cases <- filled_dt %>%
-            group_by(PROVINCE, MONTH, CASE_TYPE) %>%
-            summarize(ym_cases = sum(TOTAL_CASES, na.rm = TRUE))
         monthly_department_probable_confirmed_cases <- filled_dt[, list(ym_cases = sum(TOTAL_CASES,
             na.rm = TRUE)), by = c("PROVINCE", "MONTH", "CASE_TYPE")]
         monthly_department_probable_confirmed_cases <- as.data.table(monthly_department_probable_confirmed_cases)
@@ -80,42 +120,35 @@ if (file.exists(p01_filename)) {
             1, nchar(MONTH))]
         monthly_department_probable_confirmed_cases[, YEAR := substr(MONTH, 1,
             4)]
-        monthly_department_probable_confirmed_cases[, m := as.numeric(m)]
-        monthly_department_probable_confirmed_cases[, MONTH := NULL]
-        setnames(monthly_department_probable_confirmed_cases, "m", "MONTH")
+        monthly_department_probable_confirmed_cases[, m := as.numeric(m)]  # m is numeric month 1-12
+        monthly_department_probable_confirmed_cases[, MONTH := NULL]  # Remove old Month col
+        setnames(monthly_department_probable_confirmed_cases, "m", "MONTH")  # rename m to MONTH
         monthly_department_probable_confirmed_cases[, YEAR := as.numeric(YEAR)]
-        monthly_department_probable_confirmed_cases
+
         # Merge in total collapsed (confirmed+reported) cases
         tmp <- monthly_department_probable_confirmed_cases[, list(TOTAL_CASES = sum(ym_cases)),
             by = c("MONTH", "PROVINCE", "YEAR")]
+        # adds a col (TOTAL_CASES) with combined case counts for all rows (prob and confirmed)
         monthly_department_probable_confirmed_cases <- merge(monthly_department_probable_confirmed_cases,
             tmp, by = c("MONTH", "PROVINCE", "YEAR"))
+        # extract confirmed cases
         confirmed_monthly_cases <- monthly_department_probable_confirmed_cases[which(CASE_TYPE ==
             "Confirmados"), list(CONFIRMED = ym_cases), by = c("MONTH", "PROVINCE",
             "YEAR")]
+        # adds a col (CONFIRMED) with confirmed case counts to all rows (prob and confirmed)
         monthly_department_probable_confirmed_cases <- merge(monthly_department_probable_confirmed_cases,
             confirmed_monthly_cases, by = c("MONTH", "PROVINCE", "YEAR"))
+        # add 'proportion confirmed' col
         monthly_department_probable_confirmed_cases[which(TOTAL_CASES != 0), PROPN_CONFIRMED :=
             CONFIRMED/TOTAL_CASES]
+        # prop_confirmed = 0 where total_cases = 0 (were NA)
         monthly_department_probable_confirmed_cases[which(TOTAL_CASES == 0), PROPN_CONFIRMED :=
             0]
-        monthly_department_probable_confirmed_cases
-
-
-
-
-
-
-
-
-
-
 
         # Collapsing probable + confirmed ----
         log_info("Collapsing probable + confirmed")
         district_peru_cases <- raw_peru_cases[, list(TOTAL_CASES = length(Sexo)),
             by = c("Distrito", "Provincia", "Departamnento", "Semana", "Ano")]
-        district_peru_cases
         setnames(district_peru_cases, colnames(district_peru_cases), c("DISTRICT",
             "PROVINCE", "REGION", "WEEK", "YEAR", "TOTAL_CASES"))
         district_peru_cases[, PROVINCE := str_to_title(PROVINCE)]
@@ -124,24 +157,15 @@ if (file.exists(p01_filename)) {
 
         missing_regions_from_cases <- unique(district_peru_cases$REGION)[which(!(unique(district_peru_cases$REGION) %in%
             peru_district_boundaries2$ADM1_ES))]
-        missing_regions_from_cases
+        print(missing_regions_from_cases)   # displays: "Madre De Dios" ""
         district_peru_cases[which(REGION == "Madre De Dios"), REGION := "Madre de Dios"]
-        # district_peru_cases[which(REGION == 'San Martin'), REGION:= 'San
-        # Martín'] district_peru_cases[which(REGION == 'Junin'), REGION:=
-        # 'Junín'] district_peru_cases[which(REGION == 'Huanuco'), REGION:=
-        # 'Huánuco']
 
         # Save district_peru_cases to RDS
         log_info("Save district_peru_cases to RDS")
         saveRDS(district_peru_cases, file = file.path(peru.province.out.dir, "district_peru_cases.RDS"))
 
-
-
-
-
         province_peru_cases <- district_peru_cases[, list(TOTAL_CASES = sum(TOTAL_CASES)),
             by = c("PROVINCE", "WEEK", "YEAR")]
-        province_peru_cases
         setkeyv(province_peru_cases, c("PROVINCE", "YEAR", "WEEK"))
         province_peru_cases <- province_peru_cases[which(PROVINCE != "")]
         province_peru_cases
@@ -166,13 +190,10 @@ if (file.exists(p01_filename)) {
         filled_dt[which(WEEK < 10), YEAR_WEEK := paste0(YEAR, "-W0", WEEK, "-1")]
         filled_dt[, REPORTED_DATE := ISOweek2date(filled_dt$YEAR_WEEK)]
         filled_dt[, MONTH := substr(REPORTED_DATE, 1, 7)]
-        filled_dt
         # Set up region-province dt (for future repeated usage)
         log_info("Set up region-province dt")
-        district_peru_cases$REGION
         region_province <- unique(subset(district_peru_cases, select = c("PROVINCE",
             "REGION")))
-        region_province
 
         # Set up Piura-Tumbes-Lambayeque province-region names data.table
         log_info("Set up Piura-Tumbes-Lambayeque province-region names data.table")
@@ -461,8 +482,8 @@ if (file.exists(p01_filename)) {
             spi_dt[, PROVINCE := rep(rep(peru_district_boundaries2$ADM2_ES, each = 12),
                 length(seq(2001, 2022, by = 1)))]
             for (i in 1:length(unique(spi_dt$YEAR))) {
-                print(paste0("Processing year ", i))
                 year <- unique(spi_dt$YEAR)[i]
+                log_info(paste0("Processing year ", year))
                 spi_file_name <- spi_file_name_func(year)
                 r <- rast(spi_file_name_func(year))
                 r <- crop(r, extent(peru_district_boundaries2))
@@ -473,7 +494,6 @@ if (file.exists(p01_filename)) {
                 tmp2[, ID := NULL]
                 setnames(tmp2, colnames(tmp2)[1], c("PROVINCE"))
                 for (j in 1:12) {
-                  print(paste("  month ", j))
                   spi_val_dt <- subset(tmp2, select = c("PROVINCE", colnames(tmp2)[j +
                     1]))
                   for (k in 1:length(unique(tmp$ADM2_ES))) {
@@ -492,9 +512,9 @@ if (file.exists(p01_filename)) {
         spi_province_dt <- data.table(spi_province_dt)
 
         # Save current workspace
-        log_info("Saving current workspace...")
-        save.image(file = p01a_filename)
-        log_info("Saved current workspace to ", p01a_filename)
+        # log_info("Saving current workspace...")
+        # save.image(file = p01a_filename)
+        # log_info("Saved current workspace to ", p01a_filename)
     }
 
 
@@ -802,24 +822,24 @@ if (file.exists(p01_filename)) {
     tmax_ccf_province_dt <- merge(tmax_ccf_province_dt, region_province, by = "PROVINCE")
     tmax_ccf_province_dt <- tmax_ccf_province_dt[which(LAG <= 0)]
     tmax_ccf_province_dt2 <- tmax_ccf_province_dt[which(LAG >= -4)]
-    all_peru_tmax_ccf_facet_plot <- ggplot(tmax_ccf_province_dt2) + geom_line(aes(x = LAG,
-        y = ACF, color = PROVINCE)) + facet_wrap(REGION ~ ., scales = "free_y") +
-        theme_bw() + theme(legend.position = "none")
-    all_peru_tmax_ccf_facet_plot
+    # all_peru_tmax_ccf_facet_plot <- ggplot(tmax_ccf_province_dt2) + geom_line(aes(x = LAG,
+    #     y = ACF, color = PROVINCE)) + facet_wrap(REGION ~ ., scales = "free_y") +
+    #     theme_bw() + theme(legend.position = "none")
+    # all_peru_tmax_ccf_facet_plot
     tmax_ccf_province_dt2[, mean(ACF), by = "LAG"]
     tmax_ccf_province_dt_ptl <- subset(tmax_ccf_province_dt, PROVINCE %in% ptl_region_province$PROVINCE)
-    paper_ccf_facet_tmax_plot <- ggplot(tmax_ccf_province_dt_ptl) + geom_line(aes(x = LAG,
-        y = ACF, color = PROVINCE)) + theme_bw() + theme(legend.position = "bottom") +
-        scale_x_continuous(breaks = seq(-20, 0, by = 2), labels = abs(seq(-20, 0,
-            by = 2))) + coord_cartesian(ylim = c(-0.4, 0.6), expand = F) + labs(x = "Lag",
-        y = "ACF", title = "Maximum Temperature") + theme(text = element_text(size = 18),
-        axis.text.x = element_text(size = 18), axis.text.y = element_text(size = 18),
-        panel.grid.minor.y = element_blank(), panel.grid.minor.x = element_blank(),
-        panel.grid.major.y = element_blank(), panel.grid.major.x = element_blank(),
-        plot.title = element_text(face = "bold", hjust = 0.5), plot.subtitle = element_blank(),
-        axis.title = element_text(size = 20), legend.text = element_text(size = 18) +
-            geom_text(size = 18), legend.position = "bottom", legend.title = element_blank())
-    paper_ccf_facet_tmax_plot
+    # paper_ccf_facet_tmax_plot <- ggplot(tmax_ccf_province_dt_ptl) + geom_line(aes(x = LAG,
+    #     y = ACF, color = PROVINCE)) + theme_bw() + theme(legend.position = "bottom") +
+    #     scale_x_continuous(breaks = seq(-20, 0, by = 2), labels = abs(seq(-20, 0,
+    #         by = 2))) + coord_cartesian(ylim = c(-0.4, 0.6), expand = F) + labs(x = "Lag",
+    #     y = "ACF", title = "Maximum Temperature") + theme(text = element_text(size = 18),
+    #     axis.text.x = element_text(size = 18), axis.text.y = element_text(size = 18),
+    #     panel.grid.minor.y = element_blank(), panel.grid.minor.x = element_blank(),
+    #     panel.grid.major.y = element_blank(), panel.grid.major.x = element_blank(),
+    #     plot.title = element_text(face = "bold", hjust = 0.5), plot.subtitle = element_blank(),
+    #     axis.title = element_text(size = 20), legend.text = element_text(size = 18) +
+    #         geom_text(size = 18), legend.position = "bottom", legend.title = element_blank())
+    # paper_ccf_facet_tmax_plot
 
 
 
@@ -864,26 +884,26 @@ if (file.exists(p01_filename)) {
     tmin_ccf_province_dt <- tmin_ccf_province_dt[which(LAG <= 0)]
     tmin_ccf_province_dt2 <- tmin_ccf_province_dt[which(LAG >= -4)]
     tmin_ccf_province_dt2 <- subset(tmin_ccf_province_dt2, PROVINCE %in% ptl_region_province$PROVINCE)
-    tmin_ccf_facet_plot <- ggplot(tmin_ccf_province_dt2) + geom_line(aes(x = LAG,
-        y = ACF, color = PROVINCE)) + facet_wrap(REGION ~ ., scales = "free_y") +
-        theme_bw() + theme(legend.position = "bottom")
-    tmin_ccf_facet_plot
+    # tmin_ccf_facet_plot <- ggplot(tmin_ccf_province_dt2) + geom_line(aes(x = LAG,
+    #     y = ACF, color = PROVINCE)) + facet_wrap(REGION ~ ., scales = "free_y") +
+    #     theme_bw() + theme(legend.position = "bottom")
+    # tmin_ccf_facet_plot
 
 
 
     tmin_ccf_province_dt_ptl <- subset(tmin_ccf_province_dt, PROVINCE %in% ptl_region_province$PROVINCE)
-    paper_ccf_facet_tmin_plot <- ggplot(tmin_ccf_province_dt_ptl) + geom_line(aes(x = LAG,
-        y = ACF, color = PROVINCE)) + theme_bw() + theme(legend.position = "bottom") +
-        scale_x_continuous(breaks = seq(-20, 0, by = 2), labels = abs(seq(-20, 0,
-            by = 2))) + coord_cartesian(ylim = c(-0.4, 0.6), expand = F) + labs(x = "Lag",
-        y = "ACF", title = "Minimum Temperature") + theme(text = element_text(size = 18),
-        axis.text.x = element_text(size = 18), axis.text.y = element_text(size = 18),
-        panel.grid.minor.y = element_blank(), panel.grid.minor.x = element_blank(),
-        panel.grid.major.y = element_blank(), panel.grid.major.x = element_blank(),
-        plot.title = element_text(face = "bold", hjust = 0.5), plot.subtitle = element_blank(),
-        axis.title = element_text(size = 20), legend.text = element_text(size = 18) +
-            geom_text(size = 18), legend.position = "bottom", legend.title = element_blank())
-    paper_ccf_facet_tmin_plot
+    # paper_ccf_facet_tmin_plot <- ggplot(tmin_ccf_province_dt_ptl) + geom_line(aes(x = LAG,
+    #     y = ACF, color = PROVINCE)) + theme_bw() + theme(legend.position = "bottom") +
+    #     scale_x_continuous(breaks = seq(-20, 0, by = 2), labels = abs(seq(-20, 0,
+    #         by = 2))) + coord_cartesian(ylim = c(-0.4, 0.6), expand = F) + labs(x = "Lag",
+    #     y = "ACF", title = "Minimum Temperature") + theme(text = element_text(size = 18),
+    #     axis.text.x = element_text(size = 18), axis.text.y = element_text(size = 18),
+    #     panel.grid.minor.y = element_blank(), panel.grid.minor.x = element_blank(),
+    #     panel.grid.major.y = element_blank(), panel.grid.major.x = element_blank(),
+    #     plot.title = element_text(face = "bold", hjust = 0.5), plot.subtitle = element_blank(),
+    #     axis.title = element_text(size = 20), legend.text = element_text(size = 18) +
+    #         geom_text(size = 18), legend.position = "bottom", legend.title = element_blank())
+    # paper_ccf_facet_tmin_plot
 
 
 
@@ -921,18 +941,18 @@ if (file.exists(p01_filename)) {
     prec_ccf_province_dt <- merge(prec_ccf_province_dt, region_province, by = "PROVINCE")
     prec_ccf_province_dt <- prec_ccf_province_dt[which(LAG <= 0)]
     prec_ccf_province_dt_ptl <- subset(prec_ccf_province_dt, PROVINCE %in% ptl_region_province$PROVINCE)
-    paper_ccf_facet_prec_plot <- ggplot(prec_ccf_province_dt_ptl) + geom_line(aes(x = LAG,
-        y = ACF, color = PROVINCE)) + theme_bw() + theme(legend.position = "bottom") +
-        scale_x_continuous(breaks = seq(-20, 0, by = 2), labels = abs(seq(-20, 0,
-            by = 2))) + coord_cartesian(ylim = c(-0.4, 0.6), expand = F) + labs(x = "Lag",
-        y = "ACF", title = "Precipitation") + theme(text = element_text(size = 18),
-        axis.text.x = element_text(size = 18), axis.text.y = element_text(size = 18),
-        panel.grid.minor.y = element_blank(), panel.grid.minor.x = element_blank(),
-        panel.grid.major.y = element_blank(), panel.grid.major.x = element_blank(),
-        plot.title = element_text(face = "bold", hjust = 0.5), plot.subtitle = element_blank(),
-        axis.title = element_text(size = 20), legend.text = element_text(size = 18) +
-            geom_text(size = 18), legend.position = "bottom", legend.title = element_blank())
-    paper_ccf_facet_prec_plot
+    # paper_ccf_facet_prec_plot <- ggplot(prec_ccf_province_dt_ptl) + geom_line(aes(x = LAG,
+    #     y = ACF, color = PROVINCE)) + theme_bw() + theme(legend.position = "bottom") +
+    #     scale_x_continuous(breaks = seq(-20, 0, by = 2), labels = abs(seq(-20, 0,
+    #         by = 2))) + coord_cartesian(ylim = c(-0.4, 0.6), expand = F) + labs(x = "Lag",
+    #     y = "ACF", title = "Precipitation") + theme(text = element_text(size = 18),
+    #     axis.text.x = element_text(size = 18), axis.text.y = element_text(size = 18),
+    #     panel.grid.minor.y = element_blank(), panel.grid.minor.x = element_blank(),
+    #     panel.grid.major.y = element_blank(), panel.grid.major.x = element_blank(),
+    #     plot.title = element_text(face = "bold", hjust = 0.5), plot.subtitle = element_blank(),
+    #     axis.title = element_text(size = 20), legend.text = element_text(size = 18) +
+    #         geom_text(size = 18), legend.position = "bottom", legend.title = element_blank())
+    # paper_ccf_facet_prec_plot
 
 
 
@@ -973,18 +993,18 @@ if (file.exists(p01_filename)) {
     spi_ccf_province_dt <- merge(spi_ccf_province_dt, region_province, by = "PROVINCE")
     spi_ccf_province_dt <- spi_ccf_province_dt[which(LAG <= 0)]
     spi_ccf_province_dt_ptl <- subset(spi_ccf_province_dt, PROVINCE %in% ptl_region_province$PROVINCE)
-    paper_ccf_facet_spi_plot <- ggplot(spi_ccf_province_dt_ptl) + geom_line(aes(x = LAG,
-        y = ACF, color = PROVINCE)) + theme_bw() + theme(legend.position = "bottom") +
-        scale_x_continuous(breaks = seq(-20, 0, by = 2), labels = abs(seq(-20, 0,
-            by = 2))) + coord_cartesian(ylim = c(-0.4, 0.6), expand = F) + labs(x = "Lag",
-        y = "ACF", title = "Standardized Precipitation Index") + theme(text = element_text(size = 18),
-        axis.text.x = element_text(size = 18), axis.text.y = element_text(size = 18),
-        panel.grid.minor.y = element_blank(), panel.grid.minor.x = element_blank(),
-        panel.grid.major.y = element_blank(), panel.grid.major.x = element_blank(),
-        plot.title = element_text(face = "bold", hjust = 0.5), plot.subtitle = element_blank(),
-        axis.title = element_text(size = 20), legend.text = element_text(size = 18) +
-            geom_text(size = 18), legend.position = "bottom", legend.title = element_blank())
-    paper_ccf_facet_spi_plot
+    # paper_ccf_facet_spi_plot <- ggplot(spi_ccf_province_dt_ptl) + geom_line(aes(x = LAG,
+    #     y = ACF, color = PROVINCE)) + theme_bw() + theme(legend.position = "bottom") +
+    #     scale_x_continuous(breaks = seq(-20, 0, by = 2), labels = abs(seq(-20, 0,
+    #         by = 2))) + coord_cartesian(ylim = c(-0.4, 0.6), expand = F) + labs(x = "Lag",
+    #     y = "ACF", title = "Standardized Precipitation Index") + theme(text = element_text(size = 18),
+    #     axis.text.x = element_text(size = 18), axis.text.y = element_text(size = 18),
+    #     panel.grid.minor.y = element_blank(), panel.grid.minor.x = element_blank(),
+    #     panel.grid.major.y = element_blank(), panel.grid.major.x = element_blank(),
+    #     plot.title = element_text(face = "bold", hjust = 0.5), plot.subtitle = element_blank(),
+    #     axis.title = element_text(size = 20), legend.text = element_text(size = 18) +
+    #         geom_text(size = 18), legend.position = "bottom", legend.title = element_blank())
+    # paper_ccf_facet_spi_plot
 
 
 
@@ -1026,18 +1046,18 @@ if (file.exists(p01_filename)) {
     oni_ccf_province_dt <- merge(oni_ccf_province_dt, region_province, by = "PROVINCE")
     oni_ccf_province_dt <- oni_ccf_province_dt[which(LAG <= 0)]
     oni_ccf_province_dt_ptl <- subset(oni_ccf_province_dt, PROVINCE %in% ptl_region_province$PROVINCE)
-    paper_ccf_facet_oni_plot <- ggplot(oni_ccf_province_dt_ptl) + geom_line(aes(x = LAG,
-        y = ACF, color = PROVINCE)) + theme_bw() + theme(legend.position = "bottom") +
-        scale_x_continuous(breaks = seq(-20, 0, by = 2), labels = abs(seq(-20, 0,
-            by = 2))) + coord_cartesian(ylim = c(-0.4, 0.6), expand = F) + labs(x = "Lag",
-        y = "ACF", title = "Oceanic Niño Index (ONI)") + theme(text = element_text(size = 18),
-        axis.text.x = element_text(size = 18), axis.text.y = element_text(size = 18),
-        panel.grid.minor.y = element_blank(), panel.grid.minor.x = element_blank(),
-        panel.grid.major.y = element_blank(), panel.grid.major.x = element_blank(),
-        plot.title = element_text(face = "bold", hjust = 0.5), plot.subtitle = element_blank(),
-        axis.title = element_text(size = 20), legend.text = element_text(size = 18) +
-            geom_text(size = 18), legend.position = "bottom", legend.title = element_blank())
-    paper_ccf_facet_oni_plot
+    # paper_ccf_facet_oni_plot <- ggplot(oni_ccf_province_dt_ptl) + geom_line(aes(x = LAG,
+    #     y = ACF, color = PROVINCE)) + theme_bw() + theme(legend.position = "bottom") +
+    #     scale_x_continuous(breaks = seq(-20, 0, by = 2), labels = abs(seq(-20, 0,
+    #         by = 2))) + coord_cartesian(ylim = c(-0.4, 0.6), expand = F) + labs(x = "Lag",
+    #     y = "ACF", title = "Oceanic Niño Index (ONI)") + theme(text = element_text(size = 18),
+    #     axis.text.x = element_text(size = 18), axis.text.y = element_text(size = 18),
+    #     panel.grid.minor.y = element_blank(), panel.grid.minor.x = element_blank(),
+    #     panel.grid.major.y = element_blank(), panel.grid.major.x = element_blank(),
+    #     plot.title = element_text(face = "bold", hjust = 0.5), plot.subtitle = element_blank(),
+    #     axis.title = element_text(size = 20), legend.text = element_text(size = 18) +
+    #         geom_text(size = 18), legend.position = "bottom", legend.title = element_blank())
+    # paper_ccf_facet_oni_plot
 
 
 
@@ -1077,18 +1097,18 @@ if (file.exists(p01_filename)) {
     icen_ccf_province_dt <- icen_ccf_province_dt[which(LAG <= 0)]
     icen_ccf_province_dt <- merge(icen_ccf_province_dt, region_province, by = "PROVINCE")
     icen_ccf_province_dt_ptl <- subset(icen_ccf_province_dt, PROVINCE %in% ptl_region_province$PROVINCE)
-    paper_ccf_facet_icen_plot <- ggplot(icen_ccf_province_dt_ptl) + geom_line(aes(x = LAG,
-        y = ACF, color = PROVINCE)) + theme_bw() + coord_cartesian(ylim = c(-0.4,
-        0.6), expand = F) + theme(legend.position = "bottom") + scale_x_continuous(breaks = seq(-20,
-        0, by = 2), labels = abs(seq(-20, 0, by = 2))) + labs(x = "Lag", y = "ACF",
-        title = "El Niño Coastal Index (ICEN)") + theme(text = element_text(size = 18),
-        axis.text.x = element_text(size = 18), axis.text.y = element_text(size = 18),
-        panel.grid.minor.y = element_blank(), panel.grid.minor.x = element_blank(),
-        panel.grid.major.y = element_blank(), panel.grid.major.x = element_blank(),
-        plot.title = element_text(face = "bold", hjust = 0.5), plot.subtitle = element_blank(),
-        axis.title = element_text(size = 20), legend.text = element_text(size = 18) +
-            geom_text(size = 18), legend.position = "bottom", legend.title = element_blank())
-    paper_ccf_facet_icen_plot
+    # paper_ccf_facet_icen_plot <- ggplot(icen_ccf_province_dt_ptl) + geom_line(aes(x = LAG,
+    #     y = ACF, color = PROVINCE)) + theme_bw() + coord_cartesian(ylim = c(-0.4,
+    #     0.6), expand = F) + theme(legend.position = "bottom") + scale_x_continuous(breaks = seq(-20,
+    #     0, by = 2), labels = abs(seq(-20, 0, by = 2))) + labs(x = "Lag", y = "ACF",
+    #     title = "El Niño Coastal Index (ICEN)") + theme(text = element_text(size = 18),
+    #     axis.text.x = element_text(size = 18), axis.text.y = element_text(size = 18),
+    #     panel.grid.minor.y = element_blank(), panel.grid.minor.x = element_blank(),
+    #     panel.grid.major.y = element_blank(), panel.grid.major.x = element_blank(),
+    #     plot.title = element_text(face = "bold", hjust = 0.5), plot.subtitle = element_blank(),
+    #     axis.title = element_text(size = 20), legend.text = element_text(size = 18) +
+    #         geom_text(size = 18), legend.position = "bottom", legend.title = element_blank())
+    # paper_ccf_facet_icen_plot
 
 
 
@@ -1111,20 +1131,20 @@ if (file.exists(p01_filename)) {
     province_peru_dt[which(province_peru_dt$PROVINCIA == "Morropón"), ]$PROVINCIA <- "Morropon"
     ptl_province_peru_dt <- subset(province_peru_dt, PROVINCIA %in% ptl_region_province$PROVINCE)
     # Map by colours
-    ptl_province_peru_map_by_colours <- ggplot(ptl_province_peru_dt, aes(geometry = geometry)) +
-        geom_sf(aes(fill = PROVINCIA), alpha = 0.7) + theme_bw() + theme(legend.position = "bottom") +
-        xlab("Longitude") + ylab("Latitude") + geom_text(data = ptl_province_peru_dt,
-        aes(coords_x, coords_y, group = NULL, label = PROVINCIA), size = 4.5) + theme(text = element_text(size = 28),
-        axis.text.x = element_text(size = 28), axis.text.y = element_text(size = 28),
-        panel.grid.minor.y = element_blank(), panel.grid.minor.x = element_blank(),
-        panel.grid.major.y = element_blank(), panel.grid.major.x = element_blank(),
-        plot.title = element_text(face = "bold", hjust = 0.5), plot.subtitle = element_blank(),
-        axis.title = element_text(size = 28), legend.text = element_text(size = 28) +
-            geom_text(size = 28), legend.position = "bottom", legend.title = element_blank())
-    ggsave(ptl_province_peru_map_by_colours, file = file.path(peru.province.out.dir,
-        "ptl_province_peru_map_by_colours.pdf"), h = 14, w = 24)
-    ggsave(ptl_province_peru_map_by_colours, file = file.path(peru.province.out.dir,
-        "ptl_province_peru_map_by_colours.png"), h = 12, w = 30)
+    # ptl_province_peru_map_by_colours <- ggplot(ptl_province_peru_dt, aes(geometry = geometry)) +
+    #     geom_sf(aes(fill = PROVINCIA), alpha = 0.7) + theme_bw() + theme(legend.position = "bottom") +
+    #     xlab("Longitude") + ylab("Latitude") + geom_text(data = ptl_province_peru_dt,
+    #     aes(coords_x, coords_y, group = NULL, label = PROVINCIA), size = 4.5) + theme(text = element_text(size = 28),
+    #     axis.text.x = element_text(size = 28), axis.text.y = element_text(size = 28),
+    #     panel.grid.minor.y = element_blank(), panel.grid.minor.x = element_blank(),
+    #     panel.grid.major.y = element_blank(), panel.grid.major.x = element_blank(),
+    #     plot.title = element_text(face = "bold", hjust = 0.5), plot.subtitle = element_blank(),
+    #     axis.title = element_text(size = 28), legend.text = element_text(size = 28) +
+    #         geom_text(size = 28), legend.position = "bottom", legend.title = element_blank())
+    # ggsave(ptl_province_peru_map_by_colours, file = file.path(peru.province.out.dir,
+    #     "ptl_province_peru_map_by_colours.pdf"), h = 14, w = 24)
+    # ggsave(ptl_province_peru_map_by_colours, file = file.path(peru.province.out.dir,
+    #     "ptl_province_peru_map_by_colours.png"), h = 12, w = 30)
 
 
 
@@ -1162,7 +1182,7 @@ if (file.exists(p01_filename)) {
     log_info("Finished processing Peru province data (01).")
 
     # Save current workspace
-    log_info("Saving current workspace...")
-    save.image(file = p01_filename)
-    log_info("Saved current workspace to ", p01_filename)
+    # log_info("Saving current workspace...")
+    # save.image(file = p01_filename)
+    # log_info("Saved current workspace to ", p01_filename)
 }

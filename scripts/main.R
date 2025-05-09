@@ -44,17 +44,12 @@ if (FALSE) {
     peru_sf <- ne_states(country = "Peru", returnclass = "sf")
 }
 
-spi_file_name_func <- function(year) {
-    return(file.path(peru.spi6.in.dir, paste0("spg06_m_wld_", year, "0101_", year,
-        "1201_m.nc")))
-}
-
 source("scripts/processing/extra_worldclim_funcs.R")
-source("scripts/processing/province_01.R")
+source("scripts/processing/province_01.R")  # <-- can now be sourced in isolation
 source("scripts/processing/province_02.R")
 
 # (must be run to set up LAG_1_LOG_CASES before _any_ forecasting)
-source("scripts/forecasting/province_python_setup.R")
+source("scripts/forecasting/province_python_setup.R")  # export ptl_province_inla_df to csv
 source("scripts/processing/province_02b.R")
 
 # ======================================================================================
