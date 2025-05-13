@@ -332,7 +332,6 @@ if (FALSE) { # file.exists(p01_filename)) {
             stdout = TRUE, stderr = TRUE)
 
         if (TRUE) {
-            # JSB - this feels like a good candidate for workflow execution
             # WorldClim Data ---- 1) 2010-2019 data extraction function
             log_info("WorldClim Data 2010-2019 data extraction function")
             extract_worldclim_variable_provinces_2010_2019 <- function(years_sequence,

@@ -1,4 +1,5 @@
 library(logger)
+library(data.table)
 
 # # Add lines from province_correlations.R # All times; plot provinces by
 # latitude latitude_monthly_dt <- copy(ptl_province_inla_df)
@@ -17,6 +18,11 @@ library(logger)
 # ptl_province_inla_df[, LOG_DIR:= log(DIR + 0.01)] # ::: JSB ::: Addition
 # ptl_province_inla_df[, LAT_PROV_IND := latitude_monthly_dt$LAT_PROV_IND]
 # ptl_province_inla_df[, LONG_PROV_IND := latitude_monthly_dt$LAT_PROV_IND]
+
+peru.province.base.dir <- file.path(getwd(), "data")
+peru.province.out.dir <- file.path(peru.province.base.dir, "output")
+
+ptl_province_inla_df <- readRDS(file = file.path(peru.province.out.dir, "ptl_province_inla_df.RDS"))
 
 log_info("Running province_02b.R")
 latitude_monthly_dt <- copy(ptl_province_inla_df)

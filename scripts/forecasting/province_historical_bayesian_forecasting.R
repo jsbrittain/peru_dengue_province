@@ -1,3 +1,37 @@
+library(logger)
+library(data.table)
+library(scoringutils)
+
+peru.province.base.dir <- file.path(getwd(), "data")
+peru.province.out.dir <- file.path(peru.province.base.dir, "output")
+peru.province.inla.data.out.dir <- file.path(peru.province.base.dir, "INLA/Output")
+peru.province.python.data.dir <- file.path(peru.province.base.dir, "python/data")
+
+ptl_province_inla_df <- data.table(read.csv(file.path(peru.province.python.data.dir,
+    "ptl_province_inla_df.csv")))
+
+latitude_monthly_dt <- copy(ptl_province_inla_df)
+setkeyv(latitude_monthly_dt, c("latitude", "longitude", "TIME"))
+tmp <- unique(subset(latitude_monthly_dt, select = c("PROVINCE")))
+tmp[, LAT_PROV_IND := seq(1, nrow(tmp), by = 1)]
+tmp[, LONG_PROV_IND := seq(1, nrow(tmp), by = 1)]
+latitude_monthly_dt <- merge(latitude_monthly_dt, tmp, by = "PROVINCE")
+setkeyv(latitude_monthly_dt, c("latitude", "longitude", "TIME"))
+latitude_monthly_dt[, SCALED_DIR := scale(DIR), by = "PROVINCE"]
+ptl_province_inla_df[, YEAR_DECIMAL := YEAR + (MONTH - 1)/12]
+ptl_province_inla_df <- merge(ptl_province_inla_df, unique(subset(latitude_monthly_dt,
+    select = c("LAT_PROV_IND", "PROVINCE"))), by = c("PROVINCE"))
+ptl_province_inla_df <- merge(ptl_province_inla_df, unique(subset(latitude_monthly_dt,
+    select = c("LONG_PROV_IND", "PROVINCE"))), by = c("PROVINCE"))
+lines_ptl_province_inla_df <- subset(ptl_province_inla_df, select = c("PROVINCE",
+    "REGION", "MONTH", "DIR", "longitude", "latitude"))
+ptl_province_inla_df[, SCALED_DIR := scale(DIR), by = "PROVINCE"]
+ptl_province_inla_df[, LOG_DIR := log(DIR + 0.01)]
+
+
+
+
+
 
 log_info("Cleaning up old workflow trigger files")
 filestem <- "zi_pois_season_sq_rsi_ns_mod_historical_tmin_roll_2_prec_roll_2_spi_icen_historical_dir.pred"
@@ -17,14 +51,12 @@ file.create(file_names)
 # province_historical_bayesian_forecasting_pre.RData
 log_info("Launch Snakemake to process province_historical_bayesian_forecasting_pre")
 current_folder <- getwd()
-setwd("../..")
 system2("snakemake", args = c("--cores", "4", "--snakefile", "workflows/forecasting/phbf/phbf.smk"),
     stdout = TRUE, stderr = TRUE)
-setwd(current_folder)
 
 log_info("Done with province_historical_bayesian_forecasting_pre")
 phbf_filename <- file.path(peru.province.out.dir, "province_historical_bayesian_forecasting.RData")
-if (file.exists(phbf_filename)) {
+if (FALSE) { # file.exists(phbf_filename)) {
     log_info("Loading previous workspace (", phbf_filename, ")...")
     load(file = phbf_filename)
 } else {
@@ -92,9 +124,9 @@ if (file.exists(phbf_filename)) {
     saveRDS(climate_2010_2018_forecast_quantile_dt, file = file.path(peru.province.inla.data.out.dir,
         paste0("climate_2010_2018_forecast_quantile_dt.RDS")))
 
-    log_info("Saving current workspace...")
-    save.image(file = phbf_filename)
-    log_info("Saved current workspace to ", phbf_filename)
+    # log_info("Saving current workspace...")
+    # save.image(file = phbf_filename)
+    # log_info("Saved current workspace to ", phbf_filename)
 }
 
 log_info("Done with province_historical_bayesian_forecasting.R")

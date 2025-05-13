@@ -1,7 +1,28 @@
 library(logger)
+library(spdep)
+library(quantmod)
+
+# Ensure summarize() is taken from dplyr
+library(conflicted)
+conflicts_prefer(dplyr::summarize)
+conflicts_prefer(tsModel::Lag)
+
+peru.province.inla.data.in.dir <- file.path(peru.province.base.dir, "INLA/Input")
+
+# Boundaries
+piura_tumbes_lambayeque <- c("Piura", "Tumbes", "Lambayeque")
+peru_district_boundaries2 <- st_read(file.path(peru.province.data.dir, "per_admbnda_adm2_ign_20200714.shp"))
+piura_tumbes_lambayeque_boundaries <- subset(peru_district_boundaries2, peru_district_boundaries2$ADM1_ES %in%
+    piura_tumbes_lambayeque)
+tmp2 <- st_as_sf(peru_district_boundaries2)
+tmp2 <- as_Spatial(tmp2)
+
+# Set up province areas
+province_areas_dt <- data.table(PROVINCE = tmp2$ADM2_ES, REGION_AREA_KM2 = area(tmp2)/1e+06)
+ptl_province_areas_dt <- subset(province_areas_dt, PROVINCE %in% piura_tumbes_lambayeque_boundaries$ADM2_ES)
 
 p02_filename <- file.path(peru.province.out.dir, "province_02.RData")
-if (file.exists(p02_filename)) {
+if (FALSE) { # file.exists(p02_filename)) {
     log_info("Loading previous workspace (", p02_filename, ")...")
     load(file = p02_filename)
 } else {

@@ -1,8 +1,15 @@
+library(dplyr)
 library(logger)
+library(data.table)
+library(scoringutils)
 
 # ------------- JSB additions (need full retest)
 
-source("scripts/processing/packages_directories.R")
+peru.province.base.dir <- file.path(getwd(), "data")
+peru.province.out.dir <- file.path(peru.province.base.dir, "output")
+peru.province.python.data.dir <- file.path(peru.province.base.dir, "python/data")
+peru.province.ensemble.out.dir <- file.path(peru.province.base.dir, "ensemble/Output")
+peru.province.inla.data.out.dir <- file.path(peru.province.base.dir, "INLA/Output")
 
 # Load data
 log_info("Load data")

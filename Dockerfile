@@ -117,6 +117,9 @@ RUN apt-get update && apt-get install -y \
 
 RUN R -e 'devtools::install_github(repo="ryantibs/quantgen", subdir="quantgen")'
 
+# Fix Snakemake install (uninstall and reinstall 9)
+RUN pip uninstall -y snakemake snakemake-storage-plugins && pip install snakemake
+
 # Set working directory
 WORKDIR /app
 
