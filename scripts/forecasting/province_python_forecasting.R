@@ -1,4 +1,24 @@
+library(dplyr)
 library(logger)
+library(ggplot2)
+library(data.table)
+library(scoringutils)
+
+peru.province.base.dir <- file.path(getwd(), "data")
+peru.province.python.out.dir <- file.path(peru.province.base.dir, "python/output")
+peru.province.python.data.dir <- file.path(peru.province.base.dir, "python/data")
+
+process_quantile_predictions <- function(models_dt) {
+  results_dt <- models_dt[which(quantile == 0.5),
+    list(
+      r2 = caret::R2(prediction, true_value),
+      mae = caret::MAE(prediction, true_value)
+    ),
+    by = c("model")
+  ]
+
+  return(results_dt)
+}
 
 quantiles = c(0.01, 0.025, seq(0.05, 0.95, 0.05), 0.975, 0.99)
 
@@ -189,34 +209,32 @@ saveRDS(quantile_historical_fine_tuned_timegpt_dir_preds_dt, file = file.path(pe
 ggplot(historical_fine_tuned_timegpt_preds_dt) + geom_point(aes(x = TimeGPT, y = LOG_CASES,
     col = "Observed")) + facet_wrap(PROVINCE ~ ., )
 
-historical_fine_tuned_timegpt_facet_plots_2018_2021 <- ggplot(historical_fine_tuned_timegpt_preds_dt) +
-    geom_point(aes(x = YEAR_DECIMAL, y = LOG_CASES, col = "Observed")) + geom_line(aes(x = YEAR_DECIMAL,
-    y = TimeGPT, col = "Estimated")) + geom_point(aes(x = YEAR_DECIMAL, y = TimeGPT,
-    col = "Estimated")) + geom_ribbon(aes(x = YEAR_DECIMAL, ymin = TimeGPT.q.2, ymax = TimeGPT.q.97),
-    alpha = 0.18) + theme_bw() + xlab("Time") + facet_wrap(fct_rev(PROVINCE) ~ .,
-    scales = "free_y", nrow = 5) + # facet_wrap(fct_rev(LAT_PROV_IND_FACTOR) ~ ., scales = 'free_y', nrow = 5)+ scales
-    scales = "free_y", nrow = 5) + # facet_wrap(fct_rev(LAT_PROV_IND_FACTOR) ~ ., scales = 'free_y', nrow = 5)+ =
-    scales = "free_y", nrow = 5) + # facet_wrap(fct_rev(LAT_PROV_IND_FACTOR) ~ ., scales = 'free_y', nrow = 5)+ "free_y",
-    scales = "free_y", nrow = 5) + # facet_wrap(fct_rev(LAT_PROV_IND_FACTOR) ~ ., scales = 'free_y', nrow = 5)+ nrow
-    scales = "free_y", nrow = 5) + # facet_wrap(fct_rev(LAT_PROV_IND_FACTOR) ~ ., scales = 'free_y', nrow = 5)+ =
-    scales = "free_y", nrow = 5) + # facet_wrap(fct_rev(LAT_PROV_IND_FACTOR) ~ ., scales = 'free_y', nrow = 5)+ 5)
-    scales = "free_y", nrow = 5) + # facet_wrap(fct_rev(LAT_PROV_IND_FACTOR) ~ ., scales = 'free_y', nrow = 5)+ +
-    scales = "free_y", nrow = 5) + # facet_wrap(fct_rev(LAT_PROV_IND_FACTOR) ~ ., scales = 'free_y', nrow = 5)+ #
-    scales = "free_y", nrow = 5) + # facet_wrap(fct_rev(LAT_PROV_IND_FACTOR) ~ ., scales = 'free_y', nrow = 5)+ facet_wrap(fct_rev(LAT_PROV_IND_FACTOR)
-    scales = "free_y", nrow = 5) + # facet_wrap(fct_rev(LAT_PROV_IND_FACTOR) ~ ., scales = 'free_y', nrow = 5)+ ~
-    scales = "free_y", nrow = 5) + # facet_wrap(fct_rev(LAT_PROV_IND_FACTOR) ~ ., scales = 'free_y', nrow = 5)+ .,
-    scales = "free_y", nrow = 5) + # facet_wrap(fct_rev(LAT_PROV_IND_FACTOR) ~ ., scales = 'free_y', nrow = 5)+ scales
-    scales = "free_y", nrow = 5) + # facet_wrap(fct_rev(LAT_PROV_IND_FACTOR) ~ ., scales = 'free_y', nrow = 5)+ =
-    scales = "free_y", nrow = 5) + # facet_wrap(fct_rev(LAT_PROV_IND_FACTOR) ~ ., scales = 'free_y', nrow = 5)+ 'free_y',
-    scales = "free_y", nrow = 5) + # facet_wrap(fct_rev(LAT_PROV_IND_FACTOR) ~ ., scales = 'free_y', nrow = 5)+ nrow
-    scales = "free_y", nrow = 5) + # facet_wrap(fct_rev(LAT_PROV_IND_FACTOR) ~ ., scales = 'free_y', nrow = 5)+ =
-    scales = "free_y", nrow = 5) + # facet_wrap(fct_rev(LAT_PROV_IND_FACTOR) ~ ., scales = 'free_y', nrow = 5)+ 5)+
-theme(legend.position = "bottom") + theme(text = element_text(size = 25), axis.text.x = element_text(size = 25),
-    axis.text.y = element_text(size = 25), panel.grid.minor.y = element_blank(),
-    panel.grid.minor.x = element_blank(), panel.grid.major.y = element_blank(), panel.grid.major.x = element_blank(),
-    plot.title = element_blank(), plot.subtitle = element_blank(), axis.title = element_text(size = 25),
-    legend.text = element_text(size = 25) + geom_text(size = 25), legend.position = "bottom",
-    legend.title = element_blank())
+historical_fine_tuned_timegpt_facet_plots_2018_2021 <-
+  ggplot(historical_fine_tuned_timegpt_preds_dt) +
+  geom_point(aes(x = YEAR_DECIMAL, y = LOG_CASES, col = "Observed")) +
+  geom_line(aes(x = YEAR_DECIMAL, y = TimeGPT, col = "Estimated")) +
+  geom_point(aes(x = YEAR_DECIMAL, y = TimeGPT, col = "Estimated")) +
+  geom_ribbon(aes(x = YEAR_DECIMAL, ymin = TimeGPT.q.2, ymax = TimeGPT.q.97), alpha = 0.18) +
+  theme_bw() +
+  xlab("Time") +
+  facet_wrap(fct_rev(PROVINCE) ~ ., scales = "free_y", nrow = 5) +
+  # facet_wrap(fct_rev(LAT_PROV_IND_FACTOR) ~ ., scales = "free_y", nrow = 5)+
+  theme(legend.position = "bottom") +
+  theme(
+    text = element_text(size = 25),
+    axis.text.x = element_text(size = 25),
+    axis.text.y = element_text(size = 25),
+    panel.grid.minor.y = element_blank(),
+    panel.grid.minor.x = element_blank(),
+    panel.grid.major.y = element_blank(),
+    panel.grid.major.x = element_blank(),
+    plot.title = element_blank(),
+    plot.subtitle = element_blank(),
+    axis.title = element_text(size = 25),
+    legend.text = element_text(size = 25) + geom_text(size = 25),
+    legend.position = "bottom",
+    legend.title = element_blank()
+  )
 historical_fine_tuned_timegpt_facet_plots_2018_2021
 
 
@@ -300,34 +318,32 @@ saveRDS(quantile_historical_no_covars_fine_tuned_timegpt_dir_preds_dt, file = fi
 ggplot(historical_no_covars_fine_tuned_timegpt_preds_dt) + geom_point(aes(x = TimeGPT,
     y = LOG_CASES, col = "Observed")) + facet_wrap(PROVINCE ~ ., )
 
-historical_no_covars_fine_tuned_timegpt_facet_plots_2018_2021 <- ggplot(historical_no_covars_fine_tuned_timegpt_preds_dt) +
-    geom_point(aes(x = YEAR_DECIMAL, y = LOG_CASES, col = "Observed")) + geom_line(aes(x = YEAR_DECIMAL,
-    y = TimeGPT, col = "Estimated")) + geom_point(aes(x = YEAR_DECIMAL, y = TimeGPT,
-    col = "Estimated")) + geom_ribbon(aes(x = YEAR_DECIMAL, ymin = TimeGPT.q.2, ymax = TimeGPT.q.97),
-    alpha = 0.18) + theme_bw() + xlab("Time") + facet_wrap(fct_rev(PROVINCE) ~ .,
-    scales = "free_y", nrow = 5) + # facet_wrap(fct_rev(LAT_PROV_IND_FACTOR) ~ ., scales = 'free_y', nrow = 5)+ scales
-    scales = "free_y", nrow = 5) + # facet_wrap(fct_rev(LAT_PROV_IND_FACTOR) ~ ., scales = 'free_y', nrow = 5)+ =
-    scales = "free_y", nrow = 5) + # facet_wrap(fct_rev(LAT_PROV_IND_FACTOR) ~ ., scales = 'free_y', nrow = 5)+ "free_y",
-    scales = "free_y", nrow = 5) + # facet_wrap(fct_rev(LAT_PROV_IND_FACTOR) ~ ., scales = 'free_y', nrow = 5)+ nrow
-    scales = "free_y", nrow = 5) + # facet_wrap(fct_rev(LAT_PROV_IND_FACTOR) ~ ., scales = 'free_y', nrow = 5)+ =
-    scales = "free_y", nrow = 5) + # facet_wrap(fct_rev(LAT_PROV_IND_FACTOR) ~ ., scales = 'free_y', nrow = 5)+ 5)
-    scales = "free_y", nrow = 5) + # facet_wrap(fct_rev(LAT_PROV_IND_FACTOR) ~ ., scales = 'free_y', nrow = 5)+ +
-    scales = "free_y", nrow = 5) + # facet_wrap(fct_rev(LAT_PROV_IND_FACTOR) ~ ., scales = 'free_y', nrow = 5)+ #
-    scales = "free_y", nrow = 5) + # facet_wrap(fct_rev(LAT_PROV_IND_FACTOR) ~ ., scales = 'free_y', nrow = 5)+ facet_wrap(fct_rev(LAT_PROV_IND_FACTOR)
-    scales = "free_y", nrow = 5) + # facet_wrap(fct_rev(LAT_PROV_IND_FACTOR) ~ ., scales = 'free_y', nrow = 5)+ ~
-    scales = "free_y", nrow = 5) + # facet_wrap(fct_rev(LAT_PROV_IND_FACTOR) ~ ., scales = 'free_y', nrow = 5)+ .,
-    scales = "free_y", nrow = 5) + # facet_wrap(fct_rev(LAT_PROV_IND_FACTOR) ~ ., scales = 'free_y', nrow = 5)+ scales
-    scales = "free_y", nrow = 5) + # facet_wrap(fct_rev(LAT_PROV_IND_FACTOR) ~ ., scales = 'free_y', nrow = 5)+ =
-    scales = "free_y", nrow = 5) + # facet_wrap(fct_rev(LAT_PROV_IND_FACTOR) ~ ., scales = 'free_y', nrow = 5)+ 'free_y',
-    scales = "free_y", nrow = 5) + # facet_wrap(fct_rev(LAT_PROV_IND_FACTOR) ~ ., scales = 'free_y', nrow = 5)+ nrow
-    scales = "free_y", nrow = 5) + # facet_wrap(fct_rev(LAT_PROV_IND_FACTOR) ~ ., scales = 'free_y', nrow = 5)+ =
-    scales = "free_y", nrow = 5) + # facet_wrap(fct_rev(LAT_PROV_IND_FACTOR) ~ ., scales = 'free_y', nrow = 5)+ 5)+
-theme(legend.position = "bottom") + theme(text = element_text(size = 25), axis.text.x = element_text(size = 25),
-    axis.text.y = element_text(size = 25), panel.grid.minor.y = element_blank(),
-    panel.grid.minor.x = element_blank(), panel.grid.major.y = element_blank(), panel.grid.major.x = element_blank(),
-    plot.title = element_blank(), plot.subtitle = element_blank(), axis.title = element_text(size = 25),
-    legend.text = element_text(size = 25) + geom_text(size = 25), legend.position = "bottom",
-    legend.title = element_blank())
+historical_no_covars_fine_tuned_timegpt_facet_plots_2018_2021 <-
+  ggplot(historical_no_covars_fine_tuned_timegpt_preds_dt) +
+  geom_point(aes(x = YEAR_DECIMAL, y = LOG_CASES, col = "Observed")) +
+  geom_line(aes(x = YEAR_DECIMAL, y = TimeGPT, col = "Estimated")) +
+  geom_point(aes(x = YEAR_DECIMAL, y = TimeGPT, col = "Estimated")) +
+  geom_ribbon(aes(x = YEAR_DECIMAL, ymin = TimeGPT.q.2, ymax = TimeGPT.q.97), alpha = 0.18) +
+  theme_bw() +
+  xlab("Time") +
+  facet_wrap(fct_rev(PROVINCE) ~ ., scales = "free_y", nrow = 5) +
+  # facet_wrap(fct_rev(LAT_PROV_IND_FACTOR) ~ ., scales = "free_y", nrow = 5)+
+  theme(legend.position = "bottom") +
+  theme(
+    text = element_text(size = 25),
+    axis.text.x = element_text(size = 25),
+    axis.text.y = element_text(size = 25),
+    panel.grid.minor.y = element_blank(),
+    panel.grid.minor.x = element_blank(),
+    panel.grid.major.y = element_blank(),
+    panel.grid.major.x = element_blank(),
+    plot.title = element_blank(),
+    plot.subtitle = element_blank(),
+    axis.title = element_text(size = 25),
+    legend.text = element_text(size = 25) + geom_text(size = 25),
+    legend.position = "bottom",
+    legend.title = element_blank()
+  )
 historical_no_covars_fine_tuned_timegpt_facet_plots_2018_2021
 
 
@@ -688,33 +704,33 @@ summary_tcn_preds_dt[, caret::R2(true_DIR, DIR_MEDIAN)]
 # color = '')
 
 
-tcn_facet_plots_2018_2021 <- ggplot(summary_tcn_preds_dt) + geom_point(aes(x = YEAR_DECIMAL,
-    y = true_DIR, col = "Observed")) + geom_line(aes(x = YEAR_DECIMAL, y = DIR_MEDIAN,
-    col = "Estimated")) + geom_point(aes(x = YEAR_DECIMAL, y = DIR_MEDIAN, col = "Estimated")) +
-    geom_ribbon(aes(x = YEAR_DECIMAL, ymin = DIR_CI_L, ymax = DIR_CI_U), alpha = 0.18) +
-    theme_bw() + xlab("Time") + facet_wrap(fct_rev(PROVINCE) ~ ., scales = "free_y",
-    nrow = 5) + # facet_wrap(fct_rev(LAT_PROV_IND_FACTOR) ~ ., scales = 'free_y', nrow = 5)+ nrow
-    nrow = 5) + # facet_wrap(fct_rev(LAT_PROV_IND_FACTOR) ~ ., scales = 'free_y', nrow = 5)+ =
-    nrow = 5) + # facet_wrap(fct_rev(LAT_PROV_IND_FACTOR) ~ ., scales = 'free_y', nrow = 5)+ 5)
-    nrow = 5) + # facet_wrap(fct_rev(LAT_PROV_IND_FACTOR) ~ ., scales = 'free_y', nrow = 5)+ +
-    nrow = 5) + # facet_wrap(fct_rev(LAT_PROV_IND_FACTOR) ~ ., scales = 'free_y', nrow = 5)+ #
-    nrow = 5) + # facet_wrap(fct_rev(LAT_PROV_IND_FACTOR) ~ ., scales = 'free_y', nrow = 5)+ facet_wrap(fct_rev(LAT_PROV_IND_FACTOR)
-    nrow = 5) + # facet_wrap(fct_rev(LAT_PROV_IND_FACTOR) ~ ., scales = 'free_y', nrow = 5)+ ~
-    nrow = 5) + # facet_wrap(fct_rev(LAT_PROV_IND_FACTOR) ~ ., scales = 'free_y', nrow = 5)+ .,
-    nrow = 5) + # facet_wrap(fct_rev(LAT_PROV_IND_FACTOR) ~ ., scales = 'free_y', nrow = 5)+ scales
-    nrow = 5) + # facet_wrap(fct_rev(LAT_PROV_IND_FACTOR) ~ ., scales = 'free_y', nrow = 5)+ =
-    nrow = 5) + # facet_wrap(fct_rev(LAT_PROV_IND_FACTOR) ~ ., scales = 'free_y', nrow = 5)+ 'free_y',
-    nrow = 5) + # facet_wrap(fct_rev(LAT_PROV_IND_FACTOR) ~ ., scales = 'free_y', nrow = 5)+ nrow
-    nrow = 5) + # facet_wrap(fct_rev(LAT_PROV_IND_FACTOR) ~ ., scales = 'free_y', nrow = 5)+ =
-    nrow = 5) + # facet_wrap(fct_rev(LAT_PROV_IND_FACTOR) ~ ., scales = 'free_y', nrow = 5)+ 5)+
-theme(legend.position = "bottom") + theme(text = element_text(size = 25), axis.text.x = element_text(size = 25),
-    axis.text.y = element_text(size = 25), panel.grid.minor.y = element_blank(),
-    panel.grid.minor.x = element_blank(), panel.grid.major.y = element_blank(), panel.grid.major.x = element_blank(),
-    plot.title = element_blank(), plot.subtitle = element_blank(), axis.title = element_text(size = 25),
-    legend.text = element_text(size = 25) + geom_text(size = 25), legend.position = "bottom",
-    legend.title = element_blank())
+tcn_facet_plots_2018_2021 <-
+  ggplot(summary_tcn_preds_dt) +
+  geom_point(aes(x = YEAR_DECIMAL, y = true_DIR, col = "Observed")) +
+  geom_line(aes(x = YEAR_DECIMAL, y = DIR_MEDIAN, col = "Estimated")) +
+  geom_point(aes(x = YEAR_DECIMAL, y = DIR_MEDIAN, col = "Estimated")) +
+  geom_ribbon(aes(x = YEAR_DECIMAL, ymin = DIR_CI_L, ymax = DIR_CI_U), alpha = 0.18) +
+  theme_bw() +
+  xlab("Time") +
+  facet_wrap(fct_rev(PROVINCE) ~ ., scales = "free_y", nrow = 5) +
+  # facet_wrap(fct_rev(LAT_PROV_IND_FACTOR) ~ ., scales = "free_y", nrow = 5)+
+  theme(legend.position = "bottom") +
+  theme(
+    text = element_text(size = 25),
+    axis.text.x = element_text(size = 25),
+    axis.text.y = element_text(size = 25),
+    panel.grid.minor.y = element_blank(),
+    panel.grid.minor.x = element_blank(),
+    panel.grid.major.y = element_blank(),
+    panel.grid.major.x = element_blank(),
+    plot.title = element_blank(),
+    plot.subtitle = element_blank(),
+    axis.title = element_text(size = 25),
+    legend.text = element_text(size = 25) + geom_text(size = 25),
+    legend.position = "bottom",
+    legend.title = element_blank()
+  )
 tcn_facet_plots_2018_2021
-
 
 
 # SARIMA (USE) ----
@@ -815,29 +831,32 @@ summary_sarima_preds_dt[, caret::R2(true_DIR, DIR_MEDIAN)]
 # color = '')
 
 
-sarima_facet_plots_2018_2021 <- ggplot(summary_sarima_preds_dt) + geom_point(aes(x = YEAR_DECIMAL,
-    y = true_DIR, col = "Observed")) + geom_line(aes(x = YEAR_DECIMAL, y = DIR_MEDIAN,
-    col = "Estimated")) + geom_point(aes(x = YEAR_DECIMAL, y = DIR_MEDIAN, col = "Estimated")) +
-    geom_ribbon(aes(x = YEAR_DECIMAL, ymin = DIR_CI_L, ymax = DIR_CI_U), alpha = 0.18) +
-    theme_bw() + xlab("Time") + facet_wrap(fct_rev(PROVINCE) ~ ., scales = "free_y",
-    nrow = 5) + # facet_wrap(fct_rev(LAT_PROV_IND_FACTOR) ~ ., scales = 'free_y', nrow = 5)+ nrow
-    nrow = 5) + # facet_wrap(fct_rev(LAT_PROV_IND_FACTOR) ~ ., scales = 'free_y', nrow = 5)+ =
-    nrow = 5) + # facet_wrap(fct_rev(LAT_PROV_IND_FACTOR) ~ ., scales = 'free_y', nrow = 5)+ 5)
-    nrow = 5) + # facet_wrap(fct_rev(LAT_PROV_IND_FACTOR) ~ ., scales = 'free_y', nrow = 5)+ +
-    nrow = 5) + # facet_wrap(fct_rev(LAT_PROV_IND_FACTOR) ~ ., scales = 'free_y', nrow = 5)+ #
-    nrow = 5) + # facet_wrap(fct_rev(LAT_PROV_IND_FACTOR) ~ ., scales = 'free_y', nrow = 5)+ facet_wrap(fct_rev(LAT_PROV_IND_FACTOR)
-    nrow = 5) + # facet_wrap(fct_rev(LAT_PROV_IND_FACTOR) ~ ., scales = 'free_y', nrow = 5)+ ~
-    nrow = 5) + # facet_wrap(fct_rev(LAT_PROV_IND_FACTOR) ~ ., scales = 'free_y', nrow = 5)+ .,
-    nrow = 5) + # facet_wrap(fct_rev(LAT_PROV_IND_FACTOR) ~ ., scales = 'free_y', nrow = 5)+ scales
-    nrow = 5) + # facet_wrap(fct_rev(LAT_PROV_IND_FACTOR) ~ ., scales = 'free_y', nrow = 5)+ =
-    nrow = 5) + # facet_wrap(fct_rev(LAT_PROV_IND_FACTOR) ~ ., scales = 'free_y', nrow = 5)+ 'free_y',
-    nrow = 5) + # facet_wrap(fct_rev(LAT_PROV_IND_FACTOR) ~ ., scales = 'free_y', nrow = 5)+ nrow
-    nrow = 5) + # facet_wrap(fct_rev(LAT_PROV_IND_FACTOR) ~ ., scales = 'free_y', nrow = 5)+ =
-    nrow = 5) + # facet_wrap(fct_rev(LAT_PROV_IND_FACTOR) ~ ., scales = 'free_y', nrow = 5)+ 5)+
-theme(legend.position = "bottom") + theme(text = element_text(size = 25), axis.text.x = element_text(size = 25),
-    axis.text.y = element_text(size = 25), panel.grid.minor.y = element_blank(),
-    panel.grid.minor.x = element_blank(), panel.grid.major.y = element_blank(), panel.grid.major.x = element_blank(),
-    plot.title = element_blank(), plot.subtitle = element_blank(), axis.title = element_text(size = 25),
-    legend.text = element_text(size = 25) + geom_text(size = 25), legend.position = "bottom",
-    legend.title = element_blank())
+sarima_facet_plots_2018_2021 <-
+  ggplot(summary_sarima_preds_dt) +
+  geom_point(aes(x = YEAR_DECIMAL, y = true_DIR, col = "Observed")) +
+  geom_line(aes(x = YEAR_DECIMAL, y = DIR_MEDIAN, col = "Estimated")) +
+  geom_point(aes(x = YEAR_DECIMAL, y = DIR_MEDIAN, col = "Estimated")) +
+  geom_ribbon(aes(x = YEAR_DECIMAL, ymin = DIR_CI_L, ymax = DIR_CI_U), alpha = 0.18) +
+  theme_bw() +
+  xlab("Time") +
+  facet_wrap(fct_rev(PROVINCE) ~ ., scales = "free_y", nrow = 5) +
+  # facet_wrap(fct_rev(LAT_PROV_IND_FACTOR) ~ ., scales = "free_y", nrow = 5)+
+  theme(legend.position = "bottom") +
+  theme(
+    text = element_text(size = 25),
+    axis.text.x = element_text(size = 25),
+    axis.text.y = element_text(size = 25),
+    panel.grid.minor.y = element_blank(),
+    panel.grid.minor.x = element_blank(),
+    panel.grid.major.y = element_blank(),
+    panel.grid.major.x = element_blank(),
+    plot.title = element_blank(),
+    plot.subtitle = element_blank(),
+    axis.title = element_text(size = 25),
+    legend.text = element_text(size = 25) + geom_text(size = 25),
+    legend.position = "bottom",
+    legend.title = element_blank()
+  )
 sarima_facet_plots_2018_2021
+
+log_info("Finished province_python_forecasting.R")

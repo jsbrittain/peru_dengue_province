@@ -49,8 +49,8 @@ source("scripts/processing/province_01.R")  # <-- can now be sourced in isolatio
 source("scripts/processing/province_02.R")
 
 # (must be run to set up LAG_1_LOG_CASES before _any_ forecasting)
-source("scripts/forecasting/province_python_setup.R")  # export ptl_province_inla_df to csv
-source("scripts/processing/province_02b.R")
+source("scripts/processing/province_export_csv.R")  # <-- runs in isolation
+source("scripts/processing/province_02b.R")  # <-- runs in isolation
 
 # ======================================================================================
 # Forecasting
@@ -97,14 +97,14 @@ if (models.python) {
         source("province_python_setup.R")
 
         # Convert the Jupyter notebook to a Python script and run
-        library(reticulate)
+        library(reticulate)  # R interface to Python
         setwd("/app")
         # notebook_path <-
         # '/app/scripts/forecasting/python_peru_forecast.ipynb' nbconvert_cmd
         # <- sprintf('jupyter nbconvert --to script %s
         # --output=/app/data/python/python_peru_forecast', notebook_path)
         # log_info('Running command: ', nbconvert_cmd) system(nbconvert_cmd)
-        system("python /app/data/python/python_peru_forecast.py")
+        system("python /app/scripts/forecasting/python_peru_forecast.py")
 
         # Read the result back in
         source("scripts/processing/packages_directories.R")
@@ -124,7 +124,7 @@ if (models.python) {
 ensembles.cases <- FALSE
 if (ensembles.cases) {
     setwd("/app")
-    source("scripts/forecasting/province_log_cases.R")
+    source("scripts/forecasting/province_log_cases.R")  # <-- runs in isolation
 }
 
 # Incidence ensemble

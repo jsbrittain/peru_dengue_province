@@ -1,3 +1,45 @@
+library(logger)
+library(data.table)
+library(scoringutils)
+
+peru.province.base.dir <- file.path(getwd(), "data")
+peru.province.inla.data.out.dir <- file.path(peru.province.base.dir, "INLA/Output")
+peru.province.python.data.dir <- file.path(peru.province.base.dir, "python/data")
+
+ptl_province_inla_df <- data.table(read.csv(file.path(peru.province.python.data.dir,
+    "ptl_province_inla_df.csv")))
+
+latitude_monthly_dt <- copy(ptl_province_inla_df)
+setkeyv(latitude_monthly_dt, c("latitude", "longitude", "TIME"))
+tmp <- unique(subset(latitude_monthly_dt, select = c("PROVINCE")))
+tmp[, LAT_PROV_IND := seq(1, nrow(tmp), by = 1)]
+tmp[, LONG_PROV_IND := seq(1, nrow(tmp), by = 1)]
+latitude_monthly_dt <- merge(latitude_monthly_dt, tmp, by = "PROVINCE")
+setkeyv(latitude_monthly_dt, c("latitude", "longitude", "TIME"))
+latitude_monthly_dt[, SCALED_DIR := scale(DIR), by = "PROVINCE"]
+ptl_province_inla_df[, YEAR_DECIMAL := YEAR + (MONTH - 1)/12]
+ptl_province_inla_df <- merge(ptl_province_inla_df, unique(subset(latitude_monthly_dt,
+    select = c("LAT_PROV_IND", "PROVINCE"))), by = c("PROVINCE"))
+ptl_province_inla_df <- merge(ptl_province_inla_df, unique(subset(latitude_monthly_dt,
+    select = c("LONG_PROV_IND", "PROVINCE"))), by = c("PROVINCE"))
+lines_ptl_province_inla_df <- subset(ptl_province_inla_df, select = c("PROVINCE",
+    "REGION", "MONTH", "DIR", "longitude", "latitude"))
+ptl_province_inla_df[, SCALED_DIR := scale(DIR), by = "PROVINCE"]
+ptl_province_inla_df[, LOG_DIR := log(DIR + 0.01)]
+
+province_first_time_2018 <- head(ptl_province_inla_df[which(ptl_province_inla_df$YEAR ==
+    2018), ]$TIME, 1) - 1
+provinces <- unique(ptl_province_inla_df$PROVINCE)
+num_provinces <- length(provinces)
+
+
+
+
+
+
+
+
+
 
 # Snakemake call ---
 
@@ -17,12 +59,10 @@ for (i in province_first_time_2018:(nrow(ptl_province_inla_df) / num_provinces -
 # Launch Snakemake
 log_info("Launch Snakemake to process province_bayesian_forecasting_pre")
 current_folder <- getwd()
-setwd("../..")
 system2("snakemake",
   args = c("--cores", "4", "--snakefile", "workflows/forecasting/pbf/pbf.smk"),
   stdout = TRUE, stderr = TRUE
 )
-setwd(current_folder)
 
 # End Snakemake call ---
 
@@ -148,3 +188,5 @@ saveRDS(climate_2018_2021_log_cases_quantile_dt,
 #   score() %>%
 #   summarise_scores(by = c("model", "quantile")) %>%
 #   plot_quantile_coverage()
+
+log_info("Done with province_bayesian_forecasting.R")
