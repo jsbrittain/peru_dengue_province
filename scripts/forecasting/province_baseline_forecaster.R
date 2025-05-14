@@ -260,10 +260,16 @@ quantile_baseline_log_cases.pred_dt_2010_2018[which(quantile == 0.5 & !is.na(pre
 quantile_baseline_log_cases.pred_dt_2010_2018[which(quantile == 0.5 & !is.na(prediction)),
     caret::MAE(true_value, prediction)]
 
+log_info("Saving historical predictions")
 saveRDS(baseline_log_cases.pred_dt_2010_2018, file = file.path(peru.province.inla.data.out.dir,
     paste0("baseline_log_cases.pred_dt_2010_2018.RDS")))
-saveRDS(quantile_baseline_log_cases.pred_dt_2010_2018, file = file.path(peru.province.out.dir,
+write.csv(baseline_log_cases.pred_dt_2010_2018,
+    paste0(peru.province.inla.data.out.dir, "/baseline_log_cases.pred_dt_2010_2018.csv"), row.names=FALSE)
+
+saveRDS(quantile_baseline_log_cases.pred_dt_2010_2018, file = file.path(peru.province.inla.data.out.dir,
     paste0("quantile_baseline_log_cases.pred_dt_2010_2018.RDS")))
+write.csv(quantile_baseline_log_cases.pred_dt_2010_2018,
+    paste0(peru.province.inla.data.out.dir, "/quantile_baseline_log_cases.pred_dt_2010_2018.csv"), row.names=FALSE)
 
 
 
@@ -289,7 +295,17 @@ quantile_baseline_log_cases.pred_dt_2018_2021[which(quantile == 0.5), caret::R2(
 quantile_baseline_log_cases.pred_dt_2018_2021[which(quantile == 0.5), caret::MAE(true_value,
     prediction)]
 
-saveRDS(baseline_log_cases.pred_dt_2010_2018, file = file.path(peru.province.inla.data.out.dir,
-    paste0("baseline_log_cases.pred_dt_2010_2018.RDS")))
-saveRDS(quantile_baseline_log_cases.pred_dt_2018_2021, file = file.path(peru.province.out.dir,
-    paste0("quantile_baseline_log_cases.pred_dt_2018_2021.RDS")))
+log_info("Saving forecasting predictions")
+saveRDS(baseline_log_cases.pred_dt_2018_2021,
+    file = file.path(peru.province.inla.data.out.dir,
+        paste0("baseline_log_cases.pred_dt_2018_2021.RDS")))
+write.csv(baseline_log_cases.pred_dt_2018_2021,
+    paste0(peru.province.inla.data.out.dir, "/baseline_log_cases.pred_dt_2018_2021.csv"), row.names=FALSE)
+
+saveRDS(quantile_baseline_log_cases.pred_dt_2018_2021,
+    file = file.path(peru.province.out.dir,
+        paste0("quantile_baseline_log_cases.pred_dt_2018_2021.RDS")))
+write.csv(quantile_baseline_log_cases.pred_dt_2018_2021,
+    paste0(peru.province.inla.data.out.dir, "/quantile_baseline_log_cases.pred_dt_2018_2021.csv"), row.names=FALSE)
+
+log_info("Finished province_baseline_forecaster.R")

@@ -127,9 +127,11 @@ if (ensembles.cases) {
     source("scripts/forecasting/province_log_cases.R")  # <-- runs in isolation
 }
 
-# Incidence ensemble
-ensembles.incidence <- FALSE
-if (ensembles.incidence) {
-    setwd("/app")
-    source("scripts/forecasting/province_dir_ensemble_scoring.R")
-}
+# # Incidence ensemble
+# # --- should be identical to LOG_CASES (with substitutions)
+#
+# ensembles.incidence <- FALSE
+# if (ensembles.incidence) {
+#     setwd("/app")
+#     source("scripts/forecasting/province_dir_ensemble_scoring.R")
+# }
