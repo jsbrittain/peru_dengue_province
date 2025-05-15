@@ -5,6 +5,7 @@ library(scoringutils)
 peru.province.base.dir <- file.path(getwd(), "data")
 peru.province.inla.data.out.dir <- file.path(peru.province.base.dir, "INLA/Output")
 peru.province.python.data.dir <- file.path(peru.province.base.dir, "python/data")
+peru.province.predictions.out.dir <- file.path(getwd(), "predictions")
 
 ptl_province_inla_df <- data.table(read.csv(file.path(peru.province.python.data.dir,
     "ptl_province_inla_df.csv")))
@@ -162,6 +163,9 @@ climate_log_cases.dt_2018_2021[, true_value := log1p(true_value * POP_OFFSET)]
 saveRDS(climate_log_cases.dt_2018_2021,
   file = file.path(peru.province.inla.data.out.dir, "climate_log_cases.dt_2018_2021.RDS")
 )
+write.csv(climate_log_cases.dt_2018_2021,
+    paste0(peru.province.predictions.out.dir, "/pred_log_cases_samples_forecasting.csv"),
+    row.names=FALSE)
 
 climate_2018_2021_log_cases_quantile_dt <-
   sample_to_quantile(climate_log_cases.dt_2018_2021,
@@ -170,6 +174,9 @@ climate_2018_2021_log_cases_quantile_dt <-
 saveRDS(climate_2018_2021_log_cases_quantile_dt,
   file = file.path(peru.province.inla.data.out.dir, "climate_2018_2021_log_cases_quantile_dt.RDS")
 )
+write.csv(climate_2018_2021_log_cases_quantile_dt,
+    paste0(peru.province.predictions.out.dir, "/pred_log_cases_quantiles_forecasting.csv"),
+    row.names=FALSE)
 # climate_2018_2021_log_cases_quantile_dt %>%
 #   score() %>%
 #   summarise_scores(by = c("model"))

@@ -1,10 +1,26 @@
 # Establish environment
-source("scripts/processing/packages_directories.R")
-library(quantgen)
+# source("scripts/processing/packages_directories.R")
+library(dplyr)
 library(logger)
 library(runner)
+library(scales)
+library(stringr)
+library(tsModel)
+library(quantgen)
+library(data.table)
+library(scoringutils)
 
 source('scripts/forecasting/forecasting_funcs.R')
+
+peru.province.base.dir <- file.path(getwd(), "data")
+peru.province.out.dir <- file.path(peru.province.base.dir, "output")
+peru.province.python.out.dir <- file.path(peru.province.base.dir, "python/output")
+peru.province.python.data.dir <- file.path(peru.province.base.dir, "python/data")
+peru.province.inla.data.out.dir <- file.path(peru.province.base.dir, "INLA/Output")
+peru.province.predictions.out.dir <- file.path(getwd(), "predictions")
+
+ptl_province_inla_df <- data.table(read.csv(file.path(peru.province.python.data.dir,
+    "ptl_province_inla_df.csv")))
 
 # Quantiles
 quantiles <- c(
@@ -152,10 +168,12 @@ iteratively_train_quantile_ensemble <- function(quantiles,
   ovr_preds_dt <- NULL
   ovr_model_weights_dt <- NULL
 
+  # JSB: This can be re-written and parallelised (snakemake)
   for (t in 1:number_testing_dates) {
-    log_info(paste0("iteratively_train_quantile_ensemble (", testing_dates[t], ", t = ", t, " of ", number_testing_dates, ")"))
+    log_info(paste0("iteratively_train_quantile_ensemble (", testing_dates[t],
+        ", t = ", t, " of ", number_testing_dates, ")"))
     new_date <- testing_dates[t]
-    # number of historical pred points
+    # number of historical pred points -- JSB: Iteratively adds rows to analysis df
     tmp_true_data <- subset(true_data, end_of_month <= new_date)
     testing_input_quantile_dt <- subset(input_quantile_dt, target_end_date == new_date)
     historical_input_quantile_dt <- rbind(
@@ -169,26 +187,14 @@ iteratively_train_quantile_ensemble <- function(quantiles,
       "location", "model",
       "target_end_date", "quantile"
     ))
-
-    # num_pred_points = nrow()
     qarr <- array(NA, dim = c(
       num_pred_points,
       num_ensemble_components,
       num_quantile_levels
     ))
-    # log_info(dim(qarr))
-    # log_info(colnames(historical_input_quantile_dt))
     prediction_indices <- sort(unique(historical_input_quantile_dt$IND))
     for (i in 1:num_pred_points) {
-      # print(paste0("i: ", i))
       for (j in 1:num_ensemble_components) {
-        # print(paste0("j: ", j))
-        # print(num_pred_points)
-        # print(num_ensemble_components)
-        # print(prediction_indices[i])
-        # print(unique(model_names[j]))
-        # print(historical_input_quantile_dt[which(IND == prediction_indices[i] &
-        #                                            model== unique(model_names[j])), ])
         qarr[i, j, ] <-
           historical_input_quantile_dt[which(IND == prediction_indices[i] &
             model == unique(model_names[j])), ]$prediction
@@ -199,7 +205,6 @@ iteratively_train_quantile_ensemble <- function(quantiles,
       tmp_true_data$LOG_CASES,
       quantiles
     )
-
     tmp_trained_quantile_ensemble <- copy(testing_input_quantile_dt)
     model_weights_dt <- data.table(model = model_names, weights = quantile_ensemble_weights$alpha)
     tmp_trained_quantile_ensemble <-
@@ -212,12 +217,6 @@ iteratively_train_quantile_ensemble <- function(quantiles,
       ovr_model_weights_dt,
       model_weights_dt
     )
-    # tmp_trained_quantile_ensemble <- tmp_trained_quantile_ensemble[, list(prediction = sum(weights*prediction)),
-    #                                                                                by = c("location", "true_value",
-    #                                                                                       "target_end_date", "quantile")]
-    #
-    # tmp_trained_quantile_ensemble[, model:= paste("trained_quantile", ensemble_model_name)]
-    # ovr_preds_dt <- tmp_trained_quantile_ensemble
   }
   return(ovr_model_weights_dt)
 }
@@ -381,10 +380,10 @@ wis_expanding_results_spatially_homoegenous[, model_factor := factor(model)]
 # wis_expanding_results_spatially_homoegenous[, effective_time:= as.Date(effective_time)]
 wis_expanding_results_spatially_homoegenous[, target_end_date := as.Date(effective_time)]
 wis_expanding_results_spatially_homoegenous$weight
-ggplot(wis_expanding_results_spatially_homoegenous) +
-  geom_line(aes(x = target_end_date, y = interval_score, color = model_factor)) +
-  theme_bw() +
-  theme(legend.position = "bottom")
+# ggplot(wis_expanding_results_spatially_homoegenous) +
+#   geom_line(aes(x = target_end_date, y = interval_score, color = model_factor)) +
+#   theme_bw() +
+#   theme(legend.position = "bottom")
 
 
 
@@ -744,7 +743,7 @@ iteratively_train_quantile_ensemble_runner <- function(quantiles,
   ovr_model_weights_dt <- NULL
 
   for (t in 1:number_dates) {
-    print(t)
+    log_info(paste0("iteratively_train_quantile_ensemble_runner: ", t, " / ", number_dates))
     new_date <- dates[t]
     lag_12_date <- lagged_dates[t]
     tmp_true_data <- subset(true_data, end_of_month <= new_date)
@@ -772,7 +771,6 @@ iteratively_train_quantile_ensemble_runner <- function(quantiles,
       "target_end_date", "quantile"
     ))
 
-    # historical_input_quantile_dt[, IND:= seq(1, 12), by = c("location", "model", "quantile")]
     setkeyv(historical_input_quantile_dt, c(
       "location", "model",
       "target_end_date", "quantile"
@@ -784,18 +782,9 @@ iteratively_train_quantile_ensemble_runner <- function(quantiles,
       num_ensemble_components, # 6
       num_quantile_levels
     )) # 23
-    # print(dim(qarr))
-    # print(dim(qarr))
     prediction_indices <- sort(unique(historical_input_quantile_dt$IND)) # Should always be 12 here
-    # print(prediction_indices)
     for (i in 1:num_pred_points) {
-      # print(paste0("i: ", i))
       for (j in 1:num_ensemble_components) {
-        # print(paste0("j: ", j))
-        # print(prediction_indices[i])
-        # print(unique(model_names[j]))
-        # print(historical_input_quantile_dt[which(IND == prediction_indices[i] &
-        #                                            model== unique(model_names[j])), ])
         qarr[i, j, ] <-
           historical_input_quantile_dt[which(IND == prediction_indices[i] &
             model == unique(model_names[j])), ]$prediction
@@ -843,16 +832,16 @@ runner_trained_ensemble_weights_quantile_log_cases_dt
 runner_trained_ensemble_weights_quantile_log_cases_dt[, model_factor := factor(model)]
 runner_trained_ensemble_weights_quantile_log_cases_dt[, target_end_date := as.Date(target_end_date)]
 
-p1 <- ggplot(runner_trained_ensemble_weights_quantile_log_cases_dt) +
-  geom_line(aes(x = target_end_date, y = weights, color = model_factor)) +
-  theme_bw() +
-  theme(legend.position = "bottom")
+# p1 <- ggplot(runner_trained_ensemble_weights_quantile_log_cases_dt) +
+#   geom_line(aes(x = target_end_date, y = weights, color = model_factor)) +
+#   theme_bw() +
+#   theme(legend.position = "bottom")
 
-p2 <- ggplot(ptl_province_2018_2021_data) +
-  geom_boxplot(aes(x = end_of_month, y = LOG_CASES)) +
-  theme_bw() +
-  theme(legend.position = "bottom")
-p2
+# p2 <- ggplot(ptl_province_2018_2021_data) +
+#   geom_boxplot(aes(x = end_of_month, y = LOG_CASES)) +
+#   theme_bw() +
+#   theme(legend.position = "bottom")
+# p2
 tmp <- copy(runner_trained_ensemble_weights_quantile_log_cases_dt)
 tmp[, target_end_date := Lag(target_end_date, -1), by = c("model")]
 tmp
@@ -873,9 +862,10 @@ trained_ensemble_quantile_log_cases_forecasts_2018_2021_dt <-
 trained_ensemble_quantile_log_cases_forecasts_2018_2021_dt[which(quantile == 0.5), caret::R2(prediction, true_value)]
 trained_ensemble_quantile_log_cases_forecasts_2018_2021_dt[which(quantile == 0.5), caret::MAE(prediction, true_value)]
 trained_ensemble_quantile_log_cases_forecasts_2018_2021_dt[, model := "pinball_trained_ensemble"]
-trained_ensemble_quantile_log_cases_forecasts_2018_2021_dt %>%
-  score() %>%
-  summarise_scores(by = c("model"))
+# JSB: 'predictions must be increasing with quantiles'
+# trained_ensemble_quantile_log_cases_forecasts_2018_2021_dt %>%
+#   score() %>%
+#   summarise_scores(by = c("model"))
 
 
 
@@ -933,21 +923,21 @@ saveRDS(runner_trained_ensemble_weights_by_province_quantile_log_cases_dt,
 runner_trained_ensemble_weights_by_province_quantile_log_cases_dt[, model_factor := factor(model)]
 runner_trained_ensemble_weights_by_province_quantile_log_cases_dt[, target_end_date := as.Date(target_end_date)]
 
-p1 <- ggplot(runner_trained_ensemble_weights_by_province_quantile_log_cases_dt) +
-  geom_line(aes(x = target_end_date, y = weights, color = model_factor)) +
-  theme_bw() +
-  facet_wrap(location ~ ., ) +
-  theme(legend.position = "bottom")
-p1
-p2 <- ggplot(ptl_province_2018_2021_data) +
-  geom_boxplot(aes(x = end_of_month, y = LOG_CASES)) +
-  theme_bw() +
-  theme(legend.position = "bottom")
-p2
-ggplot(runner_trained_ensemble_weights_by_province_quantile_log_cases_dt) +
-  geom_boxplot(aes(x = model_factor, y = weights, color = model_factor)) +
-  facet_wrap(location ~ ., ) +
-  theme(legend.position = "bottom")
+# p1 <- ggplot(runner_trained_ensemble_weights_by_province_quantile_log_cases_dt) +
+#   geom_line(aes(x = target_end_date, y = weights, color = model_factor)) +
+#   theme_bw() +
+#   facet_wrap(location ~ ., ) +
+#   theme(legend.position = "bottom")
+# p1
+# p2 <- ggplot(ptl_province_2018_2021_data) +
+#   geom_boxplot(aes(x = end_of_month, y = LOG_CASES)) +
+#   theme_bw() +
+#   theme(legend.position = "bottom")
+# p2
+# ggplot(runner_trained_ensemble_weights_by_province_quantile_log_cases_dt) +
+#   geom_boxplot(aes(x = model_factor, y = weights, color = model_factor)) +
+#   facet_wrap(location ~ ., ) +
+#   theme(legend.position = "bottom")
 
 summary_province_dependent_weights_by_province <-
   runner_trained_ensemble_weights_by_province_quantile_log_cases_dt[, list(
@@ -985,9 +975,10 @@ trained_ensemble_by_province_quantile_log_cases_forecasts_2018_2021_dt <-
 trained_ensemble_by_province_quantile_log_cases_forecasts_2018_2021_dt[which(quantile == 0.5), caret::R2(prediction, true_value)]
 trained_ensemble_by_province_quantile_log_cases_forecasts_2018_2021_dt[which(quantile == 0.5), caret::MAE(prediction, true_value)]
 trained_ensemble_by_province_quantile_log_cases_forecasts_2018_2021_dt[, model := "pinball_trained_ensemble_by_province"]
-trained_ensemble_by_province_quantile_log_cases_forecasts_2018_2021_dt %>%
-  score() %>%
-  summarise_scores(by = c("model"))
+# JSB: 'predictions must be increasing with quantiles'
+# trained_ensemble_by_province_quantile_log_cases_forecasts_2018_2021_dt %>%
+#   score() %>%
+#   summarise_scores(by = c("model"))
 tmp <- process_summary_predictions(summary_predictions(trained_ensemble_by_province_quantile_log_cases_forecasts_2018_2021_dt))
 tmp
 
@@ -1024,7 +1015,7 @@ hex <- hue_pal()(length(new_model_names))
 historical_original_model_names <- sort(unique(historical_quantile_log_cases_components_plus_ensembles_dt$model))
 historical_original_model_names
 historical_new_model_names <- c(
-  "Baseline", "Bayes-Climate", "EW-Mean *", "EW-Mean-NoBase *", "Ew-Mean-NoBayes *", "EW-Mean-NoCov *", "TimeGPT",
+  "Baseline", "Bayes-Climate", "EW-Mean *", "EW-Mean-NoBase *", "EW-Mean-NoBayes *", "EW-Mean-NoCov *", "TimeGPT",
   "TimeGPT-NoCov ", "Median *", "Median-NoBase *", "Median-NoBayes *",
   "Median-NoCov *", "SARIMA", "TCN"
 )
@@ -1046,6 +1037,43 @@ setkey(quantile_log_cases_components_plus_ensembles_dt, "model")
 
 setkey(historical_quantile_log_cases_components_plus_ensembles_dt, "model")
 # historical_quantile_log_cases_components_plus_ensembles_dt[, model_factor := NULL]
+
+
+
+
+# Write model predictions (quantiles) out
+for (name in historical_new_model_names) {
+    model_name <- str_trim(name)
+    model_name <- str_replace_all(model_name, "-", "_")
+    model_name <- str_replace_all(model_name, " ", "_")
+    model_name <- str_replace_all(model_name, fixed("*"), fixed("star"))
+    model_name <- paste0('Ensemble_', model_name)
+    print(model_name)
+    # Forecasting
+    tmp <- copy(quantile_log_cases_components_plus_ensembles_dt)
+    tmp <- tmp[tmp$model == name]
+    dir.create(file.path(peru.province.predictions.out.dir,
+        model_name), recursive = TRUE, showWarnings = FALSE)
+    write.csv(tmp,
+        file.path(peru.province.predictions.out.dir, model_name, "pred_log_cases_quantiles_forecasting.csv"),
+        row.names=FALSE)
+    # Historical
+    tmp <- copy(historical_quantile_log_cases_components_plus_ensembles_dt)
+    tmp <- tmp[tmp$model == name]
+    dir.create(file.path(peru.province.predictions.out.dir,
+        model_name), recursive = TRUE, showWarnings = FALSE)
+    write.csv(tmp,
+        file.path(peru.province.predictions.out.dir, model_name, "pred_log_cases_quantiles_historical.csv"),
+        row.names=FALSE)
+}
+
+
+
+
+
+
+
+
 # INSERT LATITUDE AND LONGITUDE INDICATORS ----
 
 
