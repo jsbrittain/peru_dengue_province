@@ -1,6 +1,5 @@
 import os
 import json
-import random
 import numpy as np
 import pandas as pd
 import pydeck as pdk
@@ -9,7 +8,6 @@ import streamlit as st
 
 from PIL import Image, ImageDraw
 from pathlib import Path
-from datetime import datetime
 
 st.set_page_config(layout="wide")
 st.title("🦟 Dengue Prediction Platform")
@@ -18,8 +16,10 @@ st.warning("WARNING - Development build — Do not rely on data.")
 
 # --- Sidebar Controls
 models = {
-    str(dir.name).replace('Ensemble_', '').replace("_", " ").replace('star', '*'): str(dir.name)
-    for dir in sorted(Path('./predictions').iterdir())
+    str(dir.name).replace("Ensemble_", "").replace("_", " ").replace("star", "*"): str(
+        dir.name
+    )
+    for dir in sorted(Path("./predictions").iterdir())
 }
 metrics = {
     "Cases (from quantiles)": "cases_quantiles",
@@ -28,6 +28,17 @@ metrics = {
 countries = {
     "Peru": "PER",
     "Chile": "CHL",
+    "Bolivia": "BOL",
+    "Ecuador": "ECU",
+    "Colombia": "COL",
+    "Brazil": "BRA",
+    "Paraguay": "PRY",
+    "Uruguay": "URY",
+    "Argentina": "ARG",
+    "Guyana": "GUY",
+    "Suriname": "SUR",
+    "Venezuela": "VEN",
+    "Panama": "PAN",
 }
 admin_levels = {
     "Admin 2": "ADM2",
@@ -38,7 +49,7 @@ basemaps = {
     "Satellite": "satellite",
 }
 colormaps = {
-    "CET D8" : cc.CET_D8,
+    "CET D8": cc.CET_D8,
     "Fire": cc.fire,
     "Rainbow": cc.rainbow,
     "Blue": cc.blues,
@@ -51,11 +62,13 @@ country = countries[country_name]
 model_name = st.sidebar.selectbox("Model:", list(models.keys()))
 model = models[model_name]
 
-if model in ['baseline', 'bayesian']:
-    metrics.update({
-        "Cases (from samples)": "cases_samples",
-        "Log cases (from samples)": "log_cases_samples",
-    })
+if model in ["baseline", "bayesian"]:
+    metrics.update(
+        {
+            "Cases (from samples)": "cases_samples",
+            "Log cases (from samples)": "log_cases_samples",
+        }
+    )
 
 metric_name = st.sidebar.selectbox("Metric:", list(metrics.keys()))
 metric = metrics[metric_name]
@@ -67,7 +80,9 @@ basemap_name = st.sidebar.selectbox("Basemap style:", list(basemaps.keys()))
 basemap = basemaps[basemap_name]
 
 selected_cmap = st.sidebar.selectbox("Colormap:", list(colormaps.keys()))
-alpha_value = st.sidebar.slider("Fill Opacity (Alpha)", min_value=0, max_value=255, value=140)
+alpha_value = st.sidebar.slider(
+    "Fill Opacity (Alpha)", min_value=0, max_value=255, value=140
+)
 invert_cmap = st.sidebar.checkbox("Invert Colormap:", False)
 
 # --- GeoJSON path
@@ -77,54 +92,92 @@ if not os.path.exists(geojson_path):
     st.error(f"GeoJSON file not found: {geojson_path}")
     st.stop()
 
-with open(geojson_path, "r") as f:
-    geojson = json.load(f)
+if st.session_state.get("geojson_path") != geojson_path:
+    with open(geojson_path, "r") as f:
+        geojson = json.load(f)
+    st.session_state.geojson = geojson
+    st.session_state.geojson_path = geojson_path
+
+geojson = st.session_state.geojson
+geojson_path = st.session_state.geojson_path
+
+fields = {
+    "Prediction": "prediction",
+    "Ground truth": "true_value",
+}
+col1, col2, col3 = st.columns([1, 1, 1])
+with col1:
+    field_name = st.selectbox("Field:", list(fields.keys()))
+field = fields[field_name]
 
 # --- Load Real Model Data
 match metric:
-    case 'cases_samples':
-        filename = Path("./predictions") / model / "pred_log_cases_samples_forecasting.csv"
-        data_transform = lambda df: np.exp(np.median(df['prediction'])) + 1
+    case "cases_sampl_es":
+        filename = (
+            Path("./predictions") / model / "pred_log_cases_samples_forecasting.csv"
+        )
+        data_transform = lambda df: np.exp(np.median(df[field])) + 1
         tooltip_text = "Cases: {data}"
-    case 'log_cases_samples':
-        filename = Path("./predictions") / model / "pred_log_cases_samples_forecasting.csv"
-        data_transform = lambda df: np.median(df['prediction'])
+    case "log_cases_samples":
+        filename = (
+            Path("./predictions") / model / "pred_log_cases_samples_forecasting.csv"
+        )
+        data_transform = lambda df: np.median(df[field])
         tooltip_text = "Log cases: {data}"
-    case 'cases_quantiles':
-        filename = Path("./predictions") / model / "pred_log_cases_quantiles_forecasting.csv"
-        data_transform = lambda df: np.exp(df[df['quantile'] == 0.5]['prediction'].values[-1]) + 1  # last value (should only be one)
+    case "cases_quantiles":
+        filename = (
+            Path("./predictions") / model / "pred_log_cases_quantiles_forecasting.csv"
+        )
+        data_transform = (
+            lambda df: np.exp(df[df["quantile"] == 0.5][field].values[-1]) + 1
+        )  # last value (should only be one)
         tooltip_text = "Cases (log): {data}"
-    case 'log_cases_quantiles':
-        filename = Path("./predictions") / model / "pred_log_cases_quantiles_forecasting.csv"
-        data_transform = lambda df: df[df['quantile'] == 0.5]['prediction'].values[-1]  # last value (should only be one)
+    case "log_cases_quantiles":
+        filename = (
+            Path("./predictions") / model / "pred_log_cases_quantiles_forecasting.csv"
+        )
+        data_transform = lambda df: df[df["quantile"] == 0.5][field].values[
+            -1
+        ]  # last value (should only be one)
         tooltip_text = "Log cases: {data}"
     case _:
         raise RuntimeError(f"Unrecognised metric: {metric_name}")
 
-if st.session_state.get('filename', None) != filename:
+if st.session_state.get("filename", None) != filename:
     with st.spinner("Loading data..."):
         st.session_state.filename = filename
-        df = pd.read_csv(str(filename), sep=',')
-        if 'location' not in df.columns and 'PROVINCE' in df.columns:
-            df = df.rename(columns={'PROVINCE': 'location'})
-        if 'target_end_date' not in df.columns and 'MONTH' in df.columns and 'YEAR' in df.columns:
-            df['target_end_date'] = pd.to_datetime(df[['YEAR', 'MONTH']].assign(day=1)) + pd.offsets.MonthEnd(0)
-        df['target_end_date'] = pd.to_datetime(df['target_end_date'])
-        model_data = {
-            f["properties"]["shapeName"]: np.nan for f in geojson["features"]
-        }
+        df = pd.read_csv(str(filename), sep=",")
+        if "location" not in df.columns and "PROVINCE" in df.columns:
+            df = df.rename(columns={"PROVINCE": "location"})
+        if (
+            "target_end_date" not in df.columns
+            and "MONTH" in df.columns
+            and "YEAR" in df.columns
+        ):
+            df["target_end_date"] = pd.to_datetime(
+                df[["YEAR", "MONTH"]].assign(day=1)
+            ) + pd.offsets.MonthEnd(0)
+        df["target_end_date"] = pd.to_datetime(df["target_end_date"])
         st.session_state.df = df
-        st.session_state.model_data = model_data
 
 df = st.session_state.df
-model_data = st.session_state.model_data
 
-df_provinces = df['location'].unique()
+# --- Date slider
+available_dates = sorted(df["target_end_date"].unique())
+closest_date = st.select_slider(
+    "Select a date:",
+    options=available_dates,
+    format_func=lambda d: d.strftime("%Y-%m-%d"),
+    value=available_dates[-1],
+)
+
+
+model_data = {f["properties"]["shapeName"]: np.nan for f in geojson["features"]}
+df_provinces = df["location"].unique()
 for prov in model_data.keys():
     if prov in df_provinces:
-        df1 = df[df['location'] == prov]
-        most_recent_time = df1['target_end_date'].max()
-        df1 = df1[df1['target_end_date'] == most_recent_time]
+        df1 = df[df["location"] == prov]
+        df1 = df1[df1["target_end_date"] == closest_date]
         model_data[prov] = data_transform(df1)
 
 
@@ -149,9 +202,13 @@ def draw_colorbar(cmap_hex_list, width=300, height=20):
         color_hex = cmap_hex_list[color_index]
 
         # Validate and convert hex to RGB
-        if isinstance(color_hex, str) and color_hex.startswith("#") and len(color_hex) == 7:
+        if (
+            isinstance(color_hex, str)
+            and color_hex.startswith("#")
+            and len(color_hex) == 7
+        ):
             try:
-                rgb = tuple(int(color_hex[i:i+2], 16) for i in (1, 3, 5))
+                rgb = tuple(int(color_hex[i : i + 2], 16) for i in (1, 3, 5))
             except ValueError:
                 rgb = (150, 150, 150)  # fallback grey
         else:
@@ -161,12 +218,14 @@ def draw_colorbar(cmap_hex_list, width=300, height=20):
 
     return bar
 
+
 def get_colormap():
     cmap = colormaps[selected_cmap]
     if invert_cmap:
         # copy and reverse colormap
         cmap = list(reversed(cmap))
     return cmap
+
 
 min_data = np.nanmin(list(model_data.values()))
 max_data = np.nanmax(list(model_data.values()))
@@ -183,14 +242,20 @@ if max_data > 0:
             # scale color to data
             normalised_data = (data - min_data) / (max_data - min_data)
             feature["properties"]["data"] = f"{data:.1f}"
-            feature["properties"]["fill_color"] = get_color(normalised_data, get_colormap(), alpha_value)
+            feature["properties"]["fill_color"] = get_color(
+                normalised_data, get_colormap(), alpha_value
+            )
 
 # --- Select basemap
 view_by_country = {
     "PER": pdk.ViewState(latitude=-9.2, longitude=-75.1, zoom=4),
     "CHL": pdk.ViewState(latitude=-35.6, longitude=-71.5, zoom=3),  # bearing=90
 }
-initial_view = view_by_country[country]
+initial_view = (
+    view_by_country[country]
+    if country in view_by_country
+    else pdk.ViewState(latitude=-9.2, longitude=-75.1, zoom=2)
+)
 map_style = {
     "light": "mapbox://styles/mapbox/light-v11",
     "dark": "mapbox://styles/mapbox/dark-v11",

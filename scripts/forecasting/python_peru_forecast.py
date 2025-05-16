@@ -32,7 +32,6 @@ def generate_torch_kwargs():
     }
 
 
-
 retrain_models = False  # JSB: Set False for faster testing; set True for predictions
 
 

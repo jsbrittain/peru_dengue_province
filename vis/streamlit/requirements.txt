@@ -3,3 +3,4 @@ pydeck
 colorcet
 streamlit
 pillow
+seaborn
