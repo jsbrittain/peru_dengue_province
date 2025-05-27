@@ -200,10 +200,10 @@ rule model_python:
 # =========================
 
 rule ensemble_log_cases:
-    input:
-        "data/models/baseline/.done",
-        "data/models/bayes/.done",
-        "data/models/python/.done",
+    # input:
+    #     "data/models/baseline/.done",
+    #     "data/models/bayes/.done",
+    #     "data/models/python/.done",
     output:
         touch("data/models/log_cases/.done")
     shell:
@@ -213,12 +213,13 @@ rule ensemble_log_cases:
             -v {WORKDIR}/workflows:/app/workflows:ro \
             -v {WORKDIR}/data:/app/data \
             -v {WORKDIR}/predictions:/app/predictions \
+            -v {WORKDIR}/analysis:/app/analysis \
             peru-build \
-            R -e 'source("scripts/forecasting/province_log_cases.R")'
+            R -e 'source("scripts/ensemble/province_log_cases.R")'
         """
 
 # ======================================================================================
-# Visualisation
+# Dashboard
 # ======================================================================================
 
 # This does not form part of the overall pipeline, but provides a rule to launch the
@@ -226,28 +227,30 @@ rule ensemble_log_cases:
 
 # Note that running the dashboard in this way is NOT a good idea as it holds snakemake
 # open until the streamlit app dies. But, it does provide a quick way to test it.
-rule vis_streamlit:
+rule dashboard:
     shell:
         """
-        docker build -t streamlit {WORKDIR}/vis/streamlit
+        docker build -t streamlit {WORKDIR}/dashboard/streamlit
         docker run \
-            -v {WORKDIR}/vis/streamlit:/app \
+            -v {WORKDIR}/dashboard/streamlit:/app \
             -v {WORKDIR}/data:/app/data \
             -v {WORKDIR}/predictions:/app/predictions \
+            -v {WORKDIR}/analysis:/app/analysis \
             -p 8501:8501 \
             streamlit
         """
 
 # Start streamlit container in background
-rule start_vis_streamlit:
+rule start_dashboard:
     shell:
         """
-        mkdir -p logs/vis
-        docker build -t streamlit {WORKDIR}/vis/streamlit
+        mkdir -p logs/dashboard
+        docker build -t streamlit {WORKDIR}/dashboard/streamlit
         docker run \
-            -v {WORKDIR}/vis/streamlit:/app \
+            -v {WORKDIR}/dashboard/streamlit:/app \
             -v {WORKDIR}/data:/app/data \
             -v {WORKDIR}/predictions:/app/predictions \
+            -v {WORKDIR}/analysis:/app/analysis \
             -p 8501:8501 \
-            streamlit 2>&1 > logs/vis/streamlit.log > &
+            streamlit 2>&1 > logs/dashboard/streamlit.log > &
         """

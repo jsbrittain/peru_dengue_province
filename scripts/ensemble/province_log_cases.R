@@ -10,7 +10,18 @@ library(quantgen)
 library(data.table)
 library(scoringutils)
 
-source('scripts/forecasting/forecasting_funcs.R')
+metric_id = 1
+if (metric_id == 1) {
+    metric_name = "log_cases"
+    metric_field = "LOG_CASES"
+} else {
+    metric_name = "dir"
+    metric_field = "DIR"
+}
+
+# source('scripts/forecasting/forecasting_funcs.R')
+source('scripts/ensemble/funcs/form_untrained_ensembles.R')
+source('scripts/ensemble/funcs/iteratively_train_quantile_ensemble_by_province.R')
 
 peru.province.base.dir <- file.path(getwd(), "data")
 peru.province.out.dir <- file.path(peru.province.base.dir, "output")
@@ -18,9 +29,7 @@ peru.province.python.out.dir <- file.path(peru.province.base.dir, "python/output
 peru.province.python.data.dir <- file.path(peru.province.base.dir, "python/data")
 peru.province.inla.data.out.dir <- file.path(peru.province.base.dir, "INLA/Output")
 peru.province.predictions.out.dir <- file.path(getwd(), "predictions")
-
-ptl_province_inla_df <- data.table(read.csv(file.path(peru.province.python.data.dir,
-    "ptl_province_inla_df.csv")))
+peru.province.analysis.out.dir <- file.path(getwd(), "analysis")
 
 # Quantiles
 quantiles <- c(
@@ -89,7 +98,7 @@ quantile_finetuned_no_covars_timegpt_preds_dt
 
 # 5) Climate
 log_info("Load climate")
-climate_2018_2021_log_cases_quantile_dt <- readRDS(file = file.path(peru.province.inla.data.out.dir, "climate_2018_2021_log_cases_quantile_dt.RDS"))
+climate_2018_2021_log_cases_quantile_dt <- readRDS(file = file.path(peru.province.inla.data.out.dir, paste0("climate_2018_2021_", metric_name, "_quantile_dt.RDS")))
 climate_2018_2021_log_cases_quantile_dt <- merge(climate_2018_2021_log_cases_quantile_dt,
   subset(ptl_province_2018_2021_data,
     select = c("PROVINCE", "TIME", "MONTH", "YEAR", "end_of_month")
@@ -109,11 +118,11 @@ climate_2018_2021_log_cases_quantile_dt
 log_info("Baseline")
 baseline_log_cases.pred_dt_2010_2018 <- readRDS(file = file.path(
   peru.province.inla.data.out.dir,
-  "baseline_log_cases.pred_dt_2010_2018.RDS"
+  paste0("baseline_", metric_name, ".pred_dt_2010_2018.RDS")
 ))
 quantile_baseline_log_cases.pred_dt_2018_2021 <- readRDS(file = file.path(
   peru.province.out.dir,
-  "quantile_baseline_log_cases.pred_dt_2018_2021.RDS"
+  paste0("quantile_baseline_", metric_name, ".pred_dt_2018_2021.RDS")
 ))
 quantile_baseline_log_cases.pred_dt_2018_2021[which(quantile == 0.5), caret::MAE(prediction, true_value)]
 quantile_baseline_log_cases.pred_dt_2018_2021[, target_end_date := as.character(target_end_date)]  # JSB
@@ -202,7 +211,7 @@ iteratively_train_quantile_ensemble <- function(quantiles,
     }
     quantile_ensemble_weights <- quantile_ensemble(
       qarr,
-      tmp_true_data$LOG_CASES,
+      tmp_true_data[[metric_field]],
       quantiles
     )
     tmp_trained_quantile_ensemble <- copy(testing_input_quantile_dt)
@@ -255,7 +264,7 @@ min_date <- min(input_quantile_dt$target_end_date)
 #   true_log_cases_data
 # )
 
-log_info("iteratively_trained_weights_log_cases_dt (2)")
+log_info(paste0("iteratively_trained_weights_", metric_name, "_dt (2)"))
 iteratively_trained_weights_log_cases_dt <- iteratively_train_quantile_ensemble(
   quantiles = quantiles,
   number_testing_dates = number_testing_dates,
@@ -266,7 +275,7 @@ iteratively_trained_weights_log_cases_dt <- iteratively_train_quantile_ensemble(
 )
 iteratively_trained_weights_log_cases_dt
 saveRDS(iteratively_trained_weights_log_cases_dt,
-  file = file.path(peru.province.out.dir, "iteratively_trained_weights_log_cases_dt.RDS")
+  file = file.path(peru.province.out.dir, paste0("iteratively_trained_weights_",metric_name ,"_dt.RDS"))
 )
 
 # iteratively_trained_weights_log_cases_dt <- readRDS(file = file.path(peru.province.out.dir, "iteratively_trained_weights_log_cases_dt.RDS"))
@@ -306,9 +315,10 @@ iteratively_trained_weights_dt_by_province <- iteratively_train_quantile_ensembl
   quantiles = quantiles,
   number_testing_dates = number_testing_dates,
   input_quantile_dt = input_quantile_dt,
-  pred_points_dt,
+  pred_points_dt = pred_points_dt,
   historical_input_quantile_dt = historical_quantile_log_cases_components_dt,
-  ptl_province_2018_2021_data
+  true_data = ptl_province_2018_2021_data,
+  data_field = metric_field
 )
 iteratively_trained_weights_dt_by_province
 # Merge in DIR  + Check outbreak 50 threshold
@@ -386,7 +396,41 @@ wis_expanding_results_spatially_homoegenous$weight
 #   theme(legend.position = "bottom")
 
 
+find_quantile_violations <- function(df) {
+    violations <- df %>%
+      arrange(location, target_end_date, quantile, model) %>%
+      group_by(location, target_end_date, model) %>%
+      mutate(
+        prev_prediction = lag(prediction),
+        prev_quantile = lag(quantile),
+        decreasing = prediction < cummax(prediction)
+      ) %>%
+      filter(decreasing)
 
+    print(violations, width=Inf)
+}
+
+fix_quantile_violations <- function(df, tolerance = 1e-8) {
+  df_fixed <- df %>%
+    arrange(location, target_end_date, quantile, model) %>%
+    group_by(location, target_end_date, model) %>%
+    group_split() %>%
+    lapply(function(data) {
+      for (i in 2:nrow(data)) {
+        prev <- data$prediction[i - 1]
+        curr <- data$prediction[i]
+
+        # Fix if drop is within tolerance
+        if (!is.na(prev) && (prev > curr) && ((prev - curr) <= tolerance)) {
+          data$prediction[i] <- prev
+        }
+      }
+      return(data)
+    }) %>%
+    bind_rows()
+
+  return(df_fixed)
+}
 
 # WIS over time (Rolling Window) ----
 log_info("WIS rolling window")
@@ -401,7 +445,6 @@ wis_rolling_window_over_time <- function(models_dt,
   for (i in seq(1, length(runner_windows_list), 1)) {
     log_info(paste0("wis_rolling_window_over_time (i = ", i, " of ", length(runner_windows_list), ")"))
     times_in_q <- runner_windows_list[[i]]
-    # print(times_in_q)
     min_time <- times_in_q[1]
     centering_time <- times_in_q[2]
     max_time <- times_in_q[3]
@@ -409,8 +452,9 @@ wis_rolling_window_over_time <- function(models_dt,
 
     rolling_window_dt <- subset(models_dt, target_end_date >= min_time &
       target_end_date <= max_time)
-    # print(rolling_window_dt)
-    # print(expanding_window_dt)
+
+    rolling_window_dt <- fix_quantile_violations(rolling_window_dt)
+
     tmp_score_summary <- rolling_window_dt %>%
       score() %>%
       summarise_scores(by = c("model"))
@@ -435,6 +479,27 @@ wis_rolling_window_over_time <- function(models_dt,
   ))
 }
 quantile_log_cases_components_plus_ensembles_dt[, target_end_date := as.Date(target_end_date)]
+
+log_info("Computing WIS (rolling window)")
+wis_combined <- wis_rolling_window_over_time(quantile_log_cases_components_plus_ensembles_dt, times=unique(quantile_log_cases_components_plus_ensembles_dt$target_end_date))
+
+wis_summary <- wis_combined[[1]]
+wis_summary[, target_end_date := as.Date(centering_date)]
+
+wis_province <- wis_combined[[2]]
+wis_province[, target_end_date := as.Date(centering_date)]
+
+log_info("Writing WIS over time (rolling window) - Summary...")
+dir.create(file.path(peru.province.analysis.out.dir,
+    "wis"), recursive = TRUE, showWarnings = FALSE)
+write.csv(wis_summary,
+    file.path(peru.province.analysis.out.dir, "wis", "wis_summary.csv"),
+    row.names=FALSE)
+log_info("Writing WIS over time (rolling window) - Provinces...")
+write.csv(wis_province,
+    file.path(peru.province.analysis.out.dir, "wis", "wis_province.csv"),
+    row.names=FALSE)
+log_info("Written WIS over time (rolling window).")
 
 # mean_rolling_wis_by_location <-
 #   wis_expanding_results_spatially_homoegenous[, list(MEAN = mean(interval_score)),
@@ -534,7 +599,7 @@ quantile_log_cases_components_plus_ensembles_dt[, target_end_date := as.Date(tar
 # Historical models ----
 quantile_baseline_log_cases.pred_dt_2010_2018 <- readRDS(file = file.path(
   peru.province.out.dir,
-  paste0("quantile_baseline_log_cases.pred_dt_2010_2018.RDS")
+  paste0("quantile_baseline_", metric_name, ".pred_dt_2010_2018.RDS")
 ))
 quantile_baseline_log_cases.pred_dt_2010_2018[, target_end_date := as.character(target_end_date)]  # JSB
 quantile_baseline_log_cases.pred_dt_2010_2018
@@ -562,7 +627,7 @@ quantile_historical_fine_tuned_timegpt_preds_dt <- readRDS(file = file.path(
 ))
 quantile_historical_fine_tuned_timegpt_preds_dt <- subset(quantile_historical_fine_tuned_timegpt_preds_dt, select = scoring_columns)
 
-climate_2010_2018_log_cases_quantile_dt <- readRDS(file = file.path(peru.province.inla.data.out.dir, "climate_2010_2018_log_cases_quantile_dt.RDS"))
+climate_2010_2018_log_cases_quantile_dt <- readRDS(file = file.path(peru.province.inla.data.out.dir, paste0("climate_2010_2018_", metric_name, "_quantile_dt.RDS")))
 climate_2010_2018_log_cases_quantile_dt <- merge(climate_2010_2018_log_cases_quantile_dt,
   subset(ptl_province_2010_2018_data,
     select = c("PROVINCE", "TIME", "MONTH", "YEAR", "end_of_month")
@@ -792,7 +857,7 @@ iteratively_train_quantile_ensemble_runner <- function(quantiles,
     }
     quantile_ensemble_weights <- quantile_ensemble(
       qarr,
-      tmp_true_data$LOG_CASES,
+      tmp_true_data[[metric_field]],
       quantiles
     )
 
@@ -823,9 +888,9 @@ runner_trained_ensemble_weights_quantile_log_cases_dt <- iteratively_train_quant
 )
 
 saveRDS(runner_trained_ensemble_weights_quantile_log_cases_dt,
-  file = file.path(peru.province.out.dir, "runner_trained_ensemble_weights_quantile_log_cases_dt.RDS")
+  file = file.path(peru.province.out.dir, paste0("runner_trained_ensemble_weights_quantile_", metric_name, "_dt.RDS"))
 )
-runner_trained_ensemble_weights_quantile_log_cases_dt <- readRDS(file = file.path(peru.province.out.dir, "runner_trained_ensemble_weights_quantile_log_cases_dt.RDS"))
+runner_trained_ensemble_weights_quantile_log_cases_dt <- readRDS(file = file.path(peru.province.out.dir, paste0("runner_trained_ensemble_weights_quantile_", metric_name, "_dt.RDS")))
 runner_trained_ensemble_weights_quantile_log_cases_dt
 
 
@@ -862,10 +927,32 @@ trained_ensemble_quantile_log_cases_forecasts_2018_2021_dt <-
 trained_ensemble_quantile_log_cases_forecasts_2018_2021_dt[which(quantile == 0.5), caret::R2(prediction, true_value)]
 trained_ensemble_quantile_log_cases_forecasts_2018_2021_dt[which(quantile == 0.5), caret::MAE(prediction, true_value)]
 trained_ensemble_quantile_log_cases_forecasts_2018_2021_dt[, model := "pinball_trained_ensemble"]
+
+# JSB: Deal with small numerical imprecision...
+trained_ensemble_quantile_log_cases_forecasts_2018_2021_dt$prediction <- log1p(exp(trained_ensemble_quantile_log_cases_forecasts_2018_2021_dt$prediction) - 1)
+
 # JSB: 'predictions must be increasing with quantiles'
-# trained_ensemble_quantile_log_cases_forecasts_2018_2021_dt %>%
-#   score() %>%
-#   summarise_scores(by = c("model"))
+trained_ensemble_quantile_log_cases_forecasts_2018_2021_dt %>%
+  score() %>%
+  summarise_scores(by = c("model"))
+
+# JSB: This code helps find violations
+find_quantile_violations <- function(df) {
+    violations <- df %>%
+      arrange(location, target_end_date, quantile) %>%
+      group_by(location, target_end_date) %>%
+      mutate(
+        prev_prediction = lag(prediction),
+        prev_quantile = lag(quantile),
+        decreasing = prediction < cummax(prediction)
+      ) %>%
+      filter(decreasing)
+
+    print(violations, width=Inf)
+}
+
+# Shows that violations are on the order of e-18
+find_quantile_violations(trained_ensemble_quantile_log_cases_forecasts_2018_2021_dt)
 
 
 
@@ -875,6 +962,7 @@ log_info("By province")
 provinces <- unique(combined_quantile_log_cases_components_dt$location)
 runner_trained_ensemble_weights_by_province_quantile_log_cases_dt <- NULL
 for (i in 1:length(provinces)) {
+  log_info(paste0("By province ", i, " of ", length(provinces)))
   prov_in_q <- provinces[i]
   input_quantile_dt <- copy(combined_quantile_log_cases_components_dt)
   # num_pred_points <- nrow(ptl_province_2018_2021_data)
@@ -888,7 +976,7 @@ for (i in 1:length(provinces)) {
   input_quantile_dt[, in_testing := ifelse(year(target_end_date) >= 2018, 1, 0)]
   max_date <- max(input_quantile_dt[which(in_testing == 0)]$target_end_date)
   # Include as we use realistic application of weights i.e. from historical performance (minimum 1 month lag)
-  input_quantile_dt[which(target_end_date == max_date), in_testing := 1]
+  input_quantile_dt[which(target_end_date == max_date), in_testing := 2]
   dates <- (unique(input_quantile_dt[which(in_testing == 1)]$target_end_date))
   number_dates <- length(unique(input_quantile_dt[which(in_testing == 1)]$target_end_date))
   lagged_dates <- unique(input_quantile_dt[which(in_testing == 1)]$lagged_date)
@@ -917,7 +1005,7 @@ for (i in 1:length(provinces)) {
 
 
 saveRDS(runner_trained_ensemble_weights_by_province_quantile_log_cases_dt,
-  file = file.path(peru.province.out.dir, "runner_trained_ensemble_weights_by_province_quantile_log_cases_dt.RDS")
+  file = file.path(peru.province.out.dir, paste0("runner_trained_ensemble_weights_by_province_quantile_", metric_name, "_dt.RDS"))
 )
 
 runner_trained_ensemble_weights_by_province_quantile_log_cases_dt[, model_factor := factor(model)]
@@ -979,8 +1067,14 @@ trained_ensemble_by_province_quantile_log_cases_forecasts_2018_2021_dt[, model :
 # trained_ensemble_by_province_quantile_log_cases_forecasts_2018_2021_dt %>%
 #   score() %>%
 #   summarise_scores(by = c("model"))
-tmp <- process_summary_predictions(summary_predictions(trained_ensemble_by_province_quantile_log_cases_forecasts_2018_2021_dt))
-tmp
+
+trained_ensemble_by_province_quantile_log_cases_forecasts_2018_2021_dt$prediction <- log1p(exp(trained_ensemble_by_province_quantile_log_cases_forecasts_2018_2021_dt$prediction) - 1)
+
+# Shows that violations are on the order of e-16
+find_quantile_violations(trained_ensemble_by_province_quantile_log_cases_forecasts_2018_2021_dt)
+
+# tmp <- process_summary_predictions(summary_predictions(trained_ensemble_by_province_quantile_log_cases_forecasts_2018_2021_dt))
+# tmp
 
 
 
@@ -1055,7 +1149,7 @@ for (name in historical_new_model_names) {
     dir.create(file.path(peru.province.predictions.out.dir,
         model_name), recursive = TRUE, showWarnings = FALSE)
     write.csv(tmp,
-        file.path(peru.province.predictions.out.dir, model_name, "pred_log_cases_quantiles_forecasting.csv"),
+        file.path(peru.province.predictions.out.dir, model_name, paste0("pred_", metric_name, "_quantiles_forecasting.csv")),
         row.names=FALSE)
     # Historical
     tmp <- copy(historical_quantile_log_cases_components_plus_ensembles_dt)
@@ -1063,7 +1157,7 @@ for (name in historical_new_model_names) {
     dir.create(file.path(peru.province.predictions.out.dir,
         model_name), recursive = TRUE, showWarnings = FALSE)
     write.csv(tmp,
-        file.path(peru.province.predictions.out.dir, model_name, "pred_log_cases_quantiles_historical.csv"),
+        file.path(peru.province.predictions.out.dir, model_name, paste0("pred_", metric_name, "_quantiles_historical.csv")),
         row.names=FALSE)
 }
 
@@ -1379,4 +1473,6 @@ quantile_log_cases_components_plus_ensembles_dt <-
 #   h = 22, w = 22
 # )
 
-log_info("Finished province_log_cases.R")
+# wis_historic <- wis_rolling_window_over_time(historical_quantile_log_cases_components_plus_ensembles_dt, times=unique(historical_quantile_log_cases_components_plus_ensembles_dt$target_end_date))
+
+log_info(paste0("Finished province_log_cases.R for metric: ", metric_name))
