@@ -127,4 +127,4 @@ WORKDIR /app
 # COPY scripts ./scripts
 
 # The main script to run on container start
-CMD ["/app/scripts/run.sh"]
+# CMD ["/app/scripts/run.sh"]
