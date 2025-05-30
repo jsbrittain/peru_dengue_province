@@ -11,6 +11,9 @@ parser$add_argument("--index", "-i", help = "Index")
 parser$add_argument("--dry-run", "-n", help = "Dry run", action = "store_true")
 xargs <- parser$parse_args()
 
+peru.province.base.dir <- file.path(getwd(), "data")
+peru.province.inla.data.out.dir <- file.path(peru.province.base.dir, "INLA/Output")
+
 # Load workspace file
 load(file = xargs$workspace)
 

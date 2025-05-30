@@ -1,5 +1,6 @@
 library(dplyr)
 library(logger)
+library(lubridate)
 library(data.table)
 library(scoringutils)
 
@@ -13,10 +14,60 @@ peru.province.inla.data.out.dir <- file.path(peru.province.base.dir, "INLA/Outpu
 
 peru.province.predictions.out.dir <- file.path(getwd(), "predictions")
 
+# Ensure output folders exist
+dir.create(peru.province.ensemble.out.dir, recursive=TRUE, showWarnings=FALSE)
+dir.create(peru.province.inla.data.out.dir, recursive=TRUE, showWarnings=FALSE)
+
 # Load data
 log_info("Load data")
-ptl_province_inla_df <- data.table(read.csv(file.path(peru.province.python.data.dir,
+df <- data.table(read.csv(file.path(peru.province.python.data.dir,
     "ptl_province_inla_df.csv")))
+
+# ----------------------------------------------------------------------------------
+
+# This is the subset of columns (out of 58) that are actually required for this analysis
+df <- df[, .(
+    PROVINCE,  # identifiers
+    YEAR,  # |
+    MONTH,  # |
+    CASES,  # measures
+    POP  # |
+)]
+
+# Required columns that can be derived
+df[, POP_OFFSET := POP/1e5]
+df[, DIR := CASES/POP*1e5]
+
+# Derive TIME, an index of month-year (1-140)
+df <- df %>%
+  mutate(date = as.Date(paste(YEAR, MONTH, 1, sep = "-")))
+date_lookup <- df %>%
+  select(date) %>%
+  distinct() %>%
+  arrange(date) %>%
+  mutate(TIME = row_number())
+df <- df %>%
+  left_join(date_lookup, by = "date")
+
+# Derive end_of_month
+df <- df %>%
+  mutate(end_of_month = ceiling_date(make_date(YEAR, MONTH, 1), "month") - days(1))
+
+# Derive LAG_1_LOG_CASES
+df <- df %>%
+  arrange(PROVINCE, TIME) %>%
+  group_by(PROVINCE) %>%
+  mutate(
+    LAG_1_LOG_CASES = lag(log1p(CASES), 1)
+  ) %>%
+  ungroup()
+
+# Revert to data frame and rename for processing
+ptl_province_inla_df = data.table(df)
+
+# ----------------------------------------------------------------------------------
+
+# Original analysis code starts here
 
 tmp <- unique(subset(ptl_province_inla_df, select = c("PROVINCE")))
 tmp[, LAT_PROV_IND := seq(1, nrow(tmp), by = 1)]
@@ -24,15 +75,10 @@ tmp[, LONG_PROV_IND := seq(1, nrow(tmp), by = 1)]
 ptl_province_inla_df <- merge(ptl_province_inla_df, tmp, by = "PROVINCE")
 ptl_province_inla_df[, YEAR_DECIMAL := YEAR + (MONTH - 1)/12]
 
-
-# ------------
-
-
 # Ensuring the following have been defined
 log_info("Ensure the following have been defined")
 ptl_province_inla_df[, LAG_1_CASES := expm1(LAG_1_LOG_CASES)]
 ptl_province_inla_df[, DIFF_CASES := CASES - LAG_1_CASES]
-
 
 # Functions to run baseline model
 log_info("Functions to run baseline model")
@@ -91,8 +137,7 @@ fit_baseline_function_to_all_data <- function(data, predict_times) {
         for (j in 1:length(predict_times)) {
 
             # Skip if the file already exists
-            if (file.exists(file.path(peru.province.ensemble.out.dir, paste0("baseline_results_",
-                i, "_", j, ".RDS")))) {
+            if (FALSE) { # file.exists(file.path(peru.province.ensemble.out.dir, paste0("baseline_results_", i, "_", j, ".RDS")))) {
                 log_info(paste0("File exists -- skipping province ", i, " time ",
                   j))
                 next
@@ -143,7 +188,7 @@ fit_baseline_function_to_all_data <- function(data, predict_times) {
 log_info("Times at which we make our forecasts")
 predict_times <- unique(ptl_province_inla_df[which(TIME < max(TIME))]$TIME)
 baseline_results_filename <- file.path(peru.province.ensemble.out.dir, "baseline_results_2010_2021.RDS")
-if (file.exists(baseline_results_filename)) {
+if (FALSE) { # file.exists(baseline_results_filename)) {
     baseline_results <- readRDS(baseline_results_filename)
 } else {
     baseline_results <- fit_baseline_function_to_all_data(ptl_province_inla_df, predict_times)

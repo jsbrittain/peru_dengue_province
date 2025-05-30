@@ -70,8 +70,10 @@ The data can then be merged and the ensemble formed. The following scripts form 
 ## Running the pipeline
 
 To run the pipeline you will need a container service such as docker. Run the pipeline with `./run.sh`. This will build and launch the container. Before launching the pipeline make sure you have provided the following files (remaining datasets will be downloaded automatically):
-- data/cases/2010_2021_cases_full_data.csv
-- data/shapefiles/province_pop.csv
-- data/shapefiles/province_pop.xlsx
-- data/shapefiles/census_data.xlsx
-- data/shapefiles/2007_census_data.xlsx
+- `data/cases/2010_2021_cases_full_data.csv`
+- `data/province/province_pop.csv`
+- `data/province/census_data.xlsx`
+- `data/province/2007_census_data.xlsx`
+
+Also need:
+- `data/INLA/Input/nbr_piura_tumbes_lambayeque.graph`

@@ -4,3 +4,4 @@ colorcet
 streamlit
 pillow
 seaborn
+openai

@@ -38,6 +38,8 @@ retrain_models = False  # JSB: Set False for faster testing; set True for predic
 data_dir = "/app/data/python/data/"
 output_dir = "/app/data/python/output/"
 
+Path(output_dir).mkdir(parents=True, exist_ok=True)
+
 
 quantiles = [
     0.010,

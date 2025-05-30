@@ -16,15 +16,15 @@ urls = expand(
 
 rule download:
     input:
-        map(
+        list(map(
             gv.remote,
             expand("{url}", url=urls)
-        ),
+        ))
     output:
-        map(
+        list(map(
             lambda url: os.path.join(target_folder, url.split('/')[-1]),
             expand("{url}", url=urls)
-        ),
+        ))
     run:
         pathlib.Path(target_folder).mkdir(parents=True, exist_ok=True)
         for src, dest in zip(input, output):

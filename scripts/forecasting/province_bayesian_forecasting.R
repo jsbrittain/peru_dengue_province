@@ -2,13 +2,25 @@ library(logger)
 library(data.table)
 library(scoringutils)
 
+# Environment variables
+SNAKEMAKE_CORES <- Sys.getenv("SNAKEMAKE_CORES", unset = "1")
+
 peru.province.base.dir <- file.path(getwd(), "data")
 peru.province.inla.data.out.dir <- file.path(peru.province.base.dir, "INLA/Output")
 peru.province.python.data.dir <- file.path(peru.province.base.dir, "python/data")
 peru.province.predictions.out.dir <- file.path(getwd(), "predictions")
 
+# Ensure output folders exist
+dir.create(peru.province.inla.data.out.dir, recursive=TRUE, showWarnings=FALSE)
+dir.create(peru.province.predictions.out.dir, recursive=TRUE, showWarnings=FALSE)
+
+# Read composite dataframe
 ptl_province_inla_df <- data.table(read.csv(file.path(peru.province.python.data.dir,
     "ptl_province_inla_df.csv")))
+
+
+
+
 
 latitude_monthly_dt <- copy(ptl_province_inla_df)
 setkeyv(latitude_monthly_dt, c("latitude", "longitude", "TIME"))
@@ -61,8 +73,9 @@ for (i in province_first_time_2018:(nrow(ptl_province_inla_df) / num_provinces -
 log_info("Launch Snakemake to process province_bayesian_forecasting_pre")
 current_folder <- getwd()
 system2("snakemake",
-  args = c("--cores", "4", "--snakefile", "workflows/forecasting/pbf/pbf.smk"),
-  stdout = TRUE, stderr = TRUE
+  args = c("--cores", SNAKEMAKE_CORES, "--snakefile", "workflows/forecasting/pbf/pbf.smk"),
+  stdout = "", stderr = "",
+  wait = TRUE
 )
 
 # End Snakemake call ---

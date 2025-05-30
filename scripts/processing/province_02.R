@@ -1,17 +1,29 @@
-library(logger)
+library(dplyr)
 library(spdep)
+library(logger)
+library(raster)
+library(tsModel)
 library(quantmod)
+library(data.table)
 
 # Ensure summarize() is taken from dplyr
 library(conflicted)
 conflicts_prefer(dplyr::summarize)
 conflicts_prefer(tsModel::Lag)
 
+peru.province.base.dir <- file.path(getwd(), "data")
+peru.province.out.dir <- file.path(peru.province.base.dir, "output")
+peru.province.data.dir <- file.path(peru.province.base.dir, "province")
 peru.province.inla.data.in.dir <- file.path(peru.province.base.dir, "INLA/Input")
+peru.shapefiles.data.dir <- file.path(peru.province.base.dir, "shapefiles")
+
+monthly_province_peru_cases <- readRDS(file.path(peru.province.data.dir, "monthly_province_peru_cases.RDS"))
+climate_dt_province <- readRDS(file.path(peru.province.out.dir, "climate_dt_province.RDS"))
+ptl_province_peru_dt <- readRDS(file.path(peru.province.data.dir, "ptl_province_preu_dt.RDS"))
 
 # Boundaries
 piura_tumbes_lambayeque <- c("Piura", "Tumbes", "Lambayeque")
-peru_district_boundaries2 <- st_read(file.path(peru.province.data.dir, "per_admbnda_adm2_ign_20200714.shp"))
+peru_district_boundaries2 <- st_read(file.path(peru.shapefiles.data.dir, "per_admbnda_adm2_ign_20200714.shp"))
 piura_tumbes_lambayeque_boundaries <- subset(peru_district_boundaries2, peru_district_boundaries2$ADM1_ES %in%
     piura_tumbes_lambayeque)
 tmp2 <- st_as_sf(peru_district_boundaries2)

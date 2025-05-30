@@ -16,8 +16,11 @@ rule phbf:
         script = ancient('workflows/forecasting/pbf/pbf.R'),
     output:
         outfile = f"{dirstem}/{filestem}{{index}}.RDS",
+    params:
+        outdir = dirstem,
     shell:
         """
+        mkdir -p {params.outdir}
         Rscript {input.script} \
             --workspace {input.workspace} \
             --index {wildcards.index}

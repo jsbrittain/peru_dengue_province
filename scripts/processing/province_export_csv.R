@@ -7,6 +7,9 @@ peru.province.base.dir <- file.path(getwd(), "data")
 peru.province.out.dir <- file.path(peru.province.base.dir, "output")
 peru.province.python.data.dir <- file.path(peru.province.base.dir, "python/data")
 
+# Ensure output folder exists
+dir.create(peru.province.python.data.dir, recursive=TRUE, showWarnings=FALSE)
+
 # Write data.table to csv for Python forecasting as follows: Set up data.table
 # with log(CASES + 1) DeepTCN, TimeGPT, and SARIMA models all fit using
 # log_cases to ensure non-negative predictions
