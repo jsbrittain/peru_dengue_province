@@ -19,6 +19,8 @@ rule download:
     params:
         url = url,
         outdir = target_folder,
+    conda:
+        "envs/conda.yml"
     shell:
         """
         mkdir -p {params.outdir}

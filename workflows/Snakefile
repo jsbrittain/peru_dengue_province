@@ -7,27 +7,35 @@ Workflow must be executed from the repo root folder (i.e. this folders parent)
 
 """
 
+import os
 from pathlib import Path
+from dotenv import load_dotenv
+
 
 WORKDIR = Path.cwd()
+SNAKEMAKE_CORES = os.environ.get("SNAKEMAKE_CORES", "1")
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 
+load_dotenv()
 
 triggers = [
+    # Datasets
     "data/icen/.done",
     "data/oni/.done",
     "data/pop/.done",
     "data/shapefiles/.done",
     "data/spi6/.done",
-    "data/climate/.done",
+    "data/worldclim/.done",
+    # Processing
     "data/processed/province/.done",
     "data/processed/province_export_csv/.done",
+    # Models
     "data/models/baseline/.done",
     "data/models/bayes/.done",
     "data/models/python/.done",
+    # Ensemble
     "data/models/log_cases/.done",
 ]
-
-# Make sure container 'peru-build' is available
 
 rule all:
     input:
@@ -52,6 +60,7 @@ rule dataset_icen:
     output: touch("data/icen/.done")
     shell:
         """
+        mkdir -p {WORKDIR}/data/icen
         docker build -t dataset-icen workflows/datasets/icen
         docker run --rm -v {WORKDIR}/data/icen:/app/data/icen dataset-icen
         """
@@ -60,6 +69,7 @@ rule dataset_oni:
     output: touch("data/oni/.done")
     shell:
         """
+        mkdir -p {WORKDIR}/data/oni
         docker build -t dataset-icen workflows/datasets/oni
         docker run --rm -v {WORKDIR}/data/oni:/app/data/oni dataset-icen
         """
@@ -68,6 +78,7 @@ rule dataset_proy:
     output: touch("data/pop/.done")
     shell:
         """
+        mkdir -p {WORKDIR}/data/proy
         docker build -t dataset-proy workflows/datasets/proy
         docker run --rm -v {WORKDIR}/data/pop:/app/data/pop dataset-proy
         """
@@ -76,6 +87,7 @@ rule dataset_shapefiles:
     output: touch("data/shapefiles/.done")
     shell:
         """
+        mkdir -p {WORKDIR}/data/shapefiles
         docker build -t dataset-shapefiles workflows/datasets/shapefiles
         docker run --rm -v {WORKDIR}/data/shapefiles:/app/data/shapefiles dataset-shapefiles
         """
@@ -84,14 +96,16 @@ rule dataset_spi6:
     output: touch("data/spi6/.done")
     shell:
         """
+        mkdir -p {WORKDIR}/data/spi6
         docker build -t dataset-spi6 workflows/datasets/spi6
         docker run --rm -v {WORKDIR}/data/spi6:/app/data/spi6 dataset-spi6
         """
 
 rule dataset_worldclim:
-    output: touch("data/climate/.done")
+    output: touch("data/worldclim/.done")
     shell:
         """
+        mkdir -p {WORKDIR}/data/worldclim
         docker build -t dataset-worldclim workflows/datasets/worldclim
         docker run --rm -v {WORKDIR}/data/climate:/app/data/climate dataset-worldclim
         """
@@ -101,16 +115,26 @@ rule dataset_worldclim:
 # =========================
 
 rule proc_province:
-    input: expand("data/{ds}/.done", ds=["icen", "oni", "pop", "shapefiles", "spi6", "climate"])
+    input: expand("data/{ds}/.done", ds=["icen", "oni", "pop", "shapefiles", "spi6", "worldclim"])
     output: touch("data/processed/province/.done")
     shell:
         """
+        docker build --platform linux/amd64 -t peru-build .
+
+        docker run --rm --platform linux/amd64 \
+            -v {WORKDIR}/scripts:/app/scripts:ro \
+            -v {WORKDIR}/workflows:/app/workflows:ro \
+            -v {WORKDIR}/data:/app/data \
+            -e SNAKEMAKE_CORES="{SNAKEMAKE_CORES}" \
+            peru-build \
+            R -e 'source("scripts/processing/province_01.R")'
+
         docker run --rm --platform linux/amd64 \
             -v {WORKDIR}/scripts:/app/scripts:ro \
             -v {WORKDIR}/workflows:/app/workflows:ro \
             -v {WORKDIR}/data:/app/data \
             peru-build \
-            R -e 'source("scripts/processing/province_01.R"); source("scripts/processing/province_02.R")'
+            R -e 'source("scripts/processing/province_02.R")'
         """
 
 rule proc_province_export_csv:
@@ -118,6 +142,7 @@ rule proc_province_export_csv:
     output: touch("data/processed/province_export_csv/.done")
     shell:
         """
+        docker build --platform linux/amd64 -t peru-build .
         docker run --rm --platform linux/amd64 \
             -v {WORKDIR}/scripts:/app/scripts:ro \
             -v {WORKDIR}/workflows:/app/workflows:ro \
@@ -136,6 +161,7 @@ rule model_baseline:
     shell:
         """
         mkdir -p {WORKDIR}/predictions_single/baseline
+        docker build --platform linux/amd64 -t peru-build .
         docker run --rm --platform linux/amd64 \
             -v {WORKDIR}/scripts:/app/scripts:ro \
             -v {WORKDIR}/workflows:/app/workflows:ro \
@@ -151,15 +177,7 @@ rule model_bayes_climate:
     shell:
         """
         mkdir -p {WORKDIR}/predictions_single/bayesian
-
-        # Forecasting
-        docker run --rm --platform linux/amd64 \
-            -v {WORKDIR}/scripts:/app/scripts:ro \
-            -v {WORKDIR}/workflows:/app/workflows:ro \
-            -v {WORKDIR}/data:/app/data \
-            -v {WORKDIR}/predictions_single/bayesian:/app/predictions \
-            peru-build \
-            R -e 'source("scripts/forecasting/province_bayesian_forecasting.R")'
+        docker build --platform linux/amd64 -t peru-build .
 
         # Historical predictions
         docker run --rm --platform linux/amd64 \
@@ -167,21 +185,37 @@ rule model_bayes_climate:
             -v {WORKDIR}/workflows:/app/workflows:ro \
             -v {WORKDIR}/data:/app/data \
             -v {WORKDIR}/predictions_single/bayesian:/app/predictions \
+            -e SNAKEMAKE_CORES="{SNAKEMAKE_CORES}" \
             peru-build \
             R -e 'source("scripts/forecasting/province_historical_bayesian_forecasting.R")'
+
+        # Forecasting
+        docker run --rm --platform linux/amd64 \
+            -v {WORKDIR}/scripts:/app/scripts:ro \
+            -v {WORKDIR}/workflows:/app/workflows:ro \
+            -v {WORKDIR}/data:/app/data \
+            -v {WORKDIR}/predictions_single/bayesian:/app/predictions \
+            -e SNAKEMAKE_CORES="{SNAKEMAKE_CORES}" \
+            peru-build \
+            R -e 'source("scripts/forecasting/province_bayesian_forecasting.R")'
         """
 
 # need to separate models into different folders
 rule model_python:
     input: "data/processed/province_export_csv/.done"
     output: touch("data/models/python/.done")
+    params:
+        api_key=os.environ.get('TIMEGPT_KEY')
     shell:
         """
+        docker build --platform linux/amd64 -t peru-build .
+
         # Python models
         docker run --rm --platform linux/amd64 \
             -v {WORKDIR}/scripts:/app/scripts:ro \
             -v {WORKDIR}/workflows:/app/workflows:ro \
             -v {WORKDIR}/data:/app/data \
+            -e TIMEGPT_KEY={params.api_key} \
             peru-build \
             python scripts/forecasting/python_peru_forecast.py
 
@@ -200,14 +234,15 @@ rule model_python:
 # =========================
 
 rule ensemble_log_cases:
-    # input:
-    #     "data/models/baseline/.done",
-    #     "data/models/bayes/.done",
-    #     "data/models/python/.done",
+    input:
+        "data/models/baseline/.done",
+        "data/models/bayes/.done",
+        "data/models/python/.done",
     output:
         touch("data/models/log_cases/.done")
     shell:
         """
+        docker build --platform linux/amd64 -t peru-build .
         docker run --rm --platform linux/amd64 \
             -v {WORKDIR}/scripts:/app/scripts:ro \
             -v {WORKDIR}/workflows:/app/workflows:ro \
@@ -236,6 +271,7 @@ rule dashboard:
             -v {WORKDIR}/data:/app/data \
             -v {WORKDIR}/predictions:/app/predictions \
             -v {WORKDIR}/analysis:/app/analysis \
+            -e OPENAI_API_KEY={OPENAI_API_KEY} \
             -p 8501:8501 \
             streamlit
         """

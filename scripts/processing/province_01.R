@@ -11,6 +11,12 @@ library(terra)
 library(raster)
 library(tsModel)
 library(mapsPERU)
+library(rgeoboundaries)
+
+source("scripts/processing/funcs/worldclim.R")
+
+# Environment variables
+SNAKEMAKE_CORES <- Sys.getenv("SNAKEMAKE_CORES", unset = "1")
 
 spi_file_name_func <- function(year) {
     return(file.path(peru.spi6.in.dir, paste0("spg06_m_wld_", year, "0101_", year,
@@ -20,15 +26,19 @@ spi_file_name_func <- function(year) {
 # From package_directories
 peru.province.base.dir <- file.path(getwd(), "data")
 peru.case_data.in.dir <- file.path(peru.province.base.dir, "cases")
-peru.province.data.dir <- file.path(peru.province.base.dir, "shapefiles")
+peru.shapefiles.data.dir <- file.path(peru.province.base.dir, "shapefiles")
+peru.province.data.dir <- file.path(peru.province.base.dir, "province")
 peru.spi6.in.dir <- file.path(peru.province.base.dir, "spi6")
 peru.province.out.dir <- file.path(peru.province.base.dir, "output")
+peru.climate.data.dir <- file.path(peru.province.base.dir, "climate")
 
 # District boundaries
-peru_district_boundaries2 <- st_read(file.path(peru.province.data.dir, "per_admbnda_adm2_ign_20200714.shp"))
+peru_district_boundaries2 <- st_read(file.path(peru.shapefiles.data.dir, "per_admbnda_adm2_ign_20200714.shp"))
 piura_tumbes_lambayeque <- c("Piura", "Tumbes", "Lambayeque")
 piura_tumbes_lambayeque_boundaries <- subset(peru_district_boundaries2, peru_district_boundaries2$ADM1_ES %in%
     piura_tumbes_lambayeque)
+
+peru_sf <- geoboundaries("Peru", "adm1", quiet = TRUE)
 
 # Replace this logic with Snakemake / workflow manager
 p01_filename <- file.path(peru.province.out.dir, "province_01.RData")
@@ -85,6 +95,7 @@ if (FALSE) { # file.exists(p01_filename)) {
         department_probable_confirmed_cases <- department_probable_confirmed_cases[which(PROVINCE !=
             ""), ]
 
+        # group by province and year and deduplicate those combinations
         province_year_comb <- department_probable_confirmed_cases[, .(PROVINCE, YEAR),
             by = c("PROVINCE", "YEAR")]
 
@@ -162,6 +173,7 @@ if (FALSE) { # file.exists(p01_filename)) {
 
         # Save district_peru_cases to RDS
         log_info("Save district_peru_cases to RDS")
+        dir.create(peru.province.out.dir, recursive=TRUE, showWarnings=FALSE)
         saveRDS(district_peru_cases, file = file.path(peru.province.out.dir, "district_peru_cases.RDS"))
 
         province_peru_cases <- district_peru_cases[, list(TOTAL_CASES = sum(TOTAL_CASES)),
@@ -224,8 +236,8 @@ if (FALSE) { # file.exists(p01_filename)) {
         log_info("Population Data")
         raw_province_peru_pops <- data.table(read.csv(file.path(peru.province.data.dir,
             "province_pop.csv"), encoding = "Latin-1"))
-        raw_province_peru_pops <- data.table(read_excel(file.path(peru.province.data.dir,
-            "province_pop.xlsx")))
+        # raw_province_peru_pops <- data.table(read_excel(file.path(peru.province.data.dir,
+        #     "province_pop.xlsx")))
         raw_province_peru_pops
         raw_province_peru_pops
         province_peru_pops <- subset(raw_province_peru_pops, Status == "Province")
@@ -328,18 +340,34 @@ if (FALSE) { # file.exists(p01_filename)) {
 
         # Launch Snakemake to process the worldclim data
         log_info("Launch Snakemake to process the worldclim data")
-        system2("snakemake", args = c("--cores", "4", "--snakefile", "workflows/processing/climate/climate.smk"),
-            stdout = TRUE, stderr = TRUE)
+        system2(
+            "snakemake",
+            args = c(
+                "--cores", SNAKEMAKE_CORES,
+                "--snakefile", "workflows/processing/climate/workflow/Snakefile"
+            ),
+            stdout = "", stderr = "",
+            wait = TRUE,
+        )
 
         if (TRUE) {
             # JSB - this feels like a good candidate for workflow execution
             # WorldClim Data ---- 1) 2010-2019 data extraction function
             log_info("WorldClim Data 2010-2019 data extraction function")
-            extract_worldclim_variable_provinces_2010_2019 <- function(years_sequence,
-                climate_variable) {
-                worldclim_variable_dt <- data.table(YEAR = rep(years_sequence, each = 12 *
-                  length(region_province$PROVINCE)), PROVINCE = rep(region_province$PROVINCE,
-                  length(years_sequence)))
+            extract_worldclim_variable_provinces_2010_2019 <- function(
+                years_sequence,
+                climate_variable
+            ) {
+                worldclim_variable_dt <- data.table(
+                    YEAR = rep(
+                        years_sequence,
+                        each = 12 * length(region_province$PROVINCE)
+                    ),
+                    PROVINCE = rep(
+                        region_province$PROVINCE,
+                        length(years_sequence)
+                    )
+                )
                 worldclim_variable_dt[, MONTH := rep(rep(seq(1, 12), each = length(region_province$PROVINCE)),
                   length(unique(years_sequence)))]
                 worldclim_variable_dt[, TIME := rep(seq(1, 12 * length(unique(YEAR))),
@@ -357,6 +385,7 @@ if (FALSE) { # file.exists(p01_filename)) {
                       log_info("Reading from RDS file: ", rds_file)
                       tmp_climate_provinces <- readRDS(rds_file)
                     } else {
+                      # If this section is running, then the Snakemake workflow has failed.
                       log_info("Processing file: ", rds_file)
                       tmp_climate_var_peru <- mask(raster(climate_variable_monthly_files[j]),
                         as_Spatial(peru_sf))
@@ -660,6 +689,8 @@ if (FALSE) { # file.exists(p01_filename)) {
     monthly_province_peru_cases <- merge(monthly_province_peru_cases, climate_dt_province,
         by = c("PROVINCE", "YEAR", "MONTH"))
 
+    saveRDS(climate_dt_province, file = file.path(peru.province.out.dir, "climate_dt_province.RDS"))
+
 
     # URBAN 2007 and 2017 Data ----
     log_info("URBAN 2007 and 2017 Data")
@@ -781,6 +812,8 @@ if (FALSE) { # file.exists(p01_filename)) {
     num_months <- nrow(monthly_province_peru_cases)/length(unique(monthly_province_peru_cases$PROVINCE))
     setkeyv(monthly_province_peru_cases, c("PROVINCE", "YEAR", "MONTH"))
     monthly_province_peru_cases[, TIME := rep(seq(1, num_months), length(unique(PROVINCE)))]
+
+    saveRDS(monthly_province_peru_cases, file.path(peru.province.data.dir, "monthly_province_peru_cases.RDS"))
 
 
 
@@ -1131,6 +1164,9 @@ if (FALSE) { # file.exists(p01_filename)) {
     sort(unique(province_peru_dt$PROVINCIA))
     province_peru_dt[which(province_peru_dt$PROVINCIA == "Morropón"), ]$PROVINCIA <- "Morropon"
     ptl_province_peru_dt <- subset(province_peru_dt, PROVINCIA %in% ptl_region_province$PROVINCE)
+
+    saveRDS(ptl_province_peru_dt, file.path(peru.province.data.dir, "ptl_province_preu_dt.RDS"))
+
     # Map by colours
     # ptl_province_peru_map_by_colours <- ggplot(ptl_province_peru_dt, aes(geometry = geometry)) +
     #     geom_sf(aes(fill = PROVINCIA), alpha = 0.7) + theme_bw() + theme(legend.position = "bottom") +
@@ -1187,3 +1223,5 @@ if (FALSE) { # file.exists(p01_filename)) {
     # save.image(file = p01_filename)
     # log_info("Saved current workspace to ", p01_filename)
 }
+
+saveRDS(ptl_province_peru_dt, file.path(peru.province.data.dir, "ptl_province_preu_dt.RDS"))

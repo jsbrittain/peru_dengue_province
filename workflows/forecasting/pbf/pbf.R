@@ -22,6 +22,9 @@ parser$add_argument("--workspace", "-w", help = "Workspace file")
 parser$add_argument("--index", "-i", help = "Index")
 xargs <- parser$parse_args()
 
+peru.province.base.dir <- file.path(getwd(), "data")
+peru.province.inla.data.out.dir <- file.path(peru.province.base.dir, "INLA/Output")
+
 # Load workspace file
 load(file = xargs$workspace)
 

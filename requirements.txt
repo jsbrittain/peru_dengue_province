@@ -1,0 +1,2 @@
+snakemake==9.5.1
+python-dotenv==1.1.0
