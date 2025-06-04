@@ -5,56 +5,58 @@ library(raster)
 library(tsModel)
 library(quantmod)
 library(data.table)
+library(rgeoboundaries)
 
 # Ensure summarize() is taken from dplyr
 library(conflicted)
 conflicts_prefer(dplyr::summarize)
 conflicts_prefer(tsModel::Lag)
 
-peru.province.base.dir <- file.path(getwd(), "data")
-peru.province.out.dir <- file.path(peru.province.base.dir, "output")
-peru.province.data.dir <- file.path(peru.province.base.dir, "province")
-peru.province.inla.data.in.dir <- file.path(peru.province.base.dir, "INLA/Input")
-peru.shapefiles.data.dir <- file.path(peru.province.base.dir, "shapefiles")
+# --------------------------------------------------------------------------------------
 
-monthly_province_peru_cases <- readRDS(file.path(peru.province.data.dir, "monthly_province_peru_cases.RDS"))
-climate_dt_province <- readRDS(file.path(peru.province.out.dir, "climate_dt_province.RDS"))
-ptl_province_peru_dt <- readRDS(file.path(peru.province.data.dir, "ptl_province_preu_dt.RDS"))
+admin1_region_names <- c("Piura", "Tumbes", "Lambayeque")
+
+force_rerun <- TRUE
+
+# --------------------------------------------------------------------------------------
+
+province.base.dir <- file.path(getwd(), "data")
+province.out.dir <- file.path(province.base.dir, "output")
+province.data.dir <- file.path(province.base.dir, "province")
+shapefiles.data.dir <- file.path(province.base.dir, "shapefiles")
+province.inla.data.in.dir <- file.path(province.base.dir, "INLA/Input")
+
+climate_dt_province <- readRDS(file.path(province.out.dir, "climate_dt_province.RDS"))
+# ptl_province_dt <- readRDS(file.path(province.data.dir, "ptl_province_peru_dt.RDS"))
+monthly_province_cases <- readRDS(file.path(province.data.dir, "monthly_province_peru_cases.RDS"))
+district_peru_cases <- readRDS(file.path(province.out.dir, "district_peru_cases.RDS"))
 
 # Boundaries
-piura_tumbes_lambayeque <- c("Piura", "Tumbes", "Lambayeque")
-peru_district_boundaries2 <- st_read(file.path(peru.shapefiles.data.dir, "per_admbnda_adm2_ign_20200714.shp"))
-piura_tumbes_lambayeque_boundaries <- subset(peru_district_boundaries2, peru_district_boundaries2$ADM1_ES %in%
-    piura_tumbes_lambayeque)
-tmp2 <- st_as_sf(peru_district_boundaries2)
-tmp2 <- as_Spatial(tmp2)
+district_boundaries <- st_read(file.path(shapefiles.data.dir, "per_admbnda_adm2_ign_20200714.shp"))
+admin1_boundaries <- subset(district_boundaries, district_boundaries$ADM1_ES %in% admin1_region_names)
+sp_boundaries <- as_Spatial(st_as_sf(district_boundaries))
+province_areas_dt <- data.table(PROVINCE = sp_boundaries$ADM2_ES, REGION_AREA_KM2 = area(sp_boundaries)/1e+06)
+ptl_province_areas_dt <- subset(province_areas_dt, PROVINCE %in% admin1_boundaries$ADM2_ES)
 
-# Set up province areas
-province_areas_dt <- data.table(PROVINCE = tmp2$ADM2_ES, REGION_AREA_KM2 = area(tmp2)/1e+06)
-ptl_province_areas_dt <- subset(province_areas_dt, PROVINCE %in% piura_tumbes_lambayeque_boundaries$ADM2_ES)
-
-p02_filename <- file.path(peru.province.out.dir, "province_02.RData")
-if (FALSE) { # file.exists(p02_filename)) {
+p02_filename <- file.path(province.out.dir, "province_02.RData")
+if ((!force_rerun) & file.exists(p02_filename)) {
     log_info("Loading previous workspace (", p02_filename, ")...")
     load(file = p02_filename)
 } else {
-
-    # Setting up data for wavelet analysis, climate-based modelling, and
-    # probabilistic forecasting
-
-
     # Extract provinces in Piura, Tumbes, and Lambayeque that registered cases
     # across 2010-2021.
     log_info("Setting up data for wavelet analysis, climate-based modelling, and probabilistic forecasting")
-    tmp <- subset(monthly_province_peru_cases, REGION %in% piura_tumbes_lambayeque)
-    piura_tumbes_lambayeque_provinces_with_cases <- unique(tmp$PROVINCE)
-    piura_tumbes_lambayeque_boundaries_with_cases <- subset(piura_tumbes_lambayeque_boundaries,
-        piura_tumbes_lambayeque_boundaries$ADM2_ES %in% piura_tumbes_lambayeque_provinces_with_cases)
+    tmp <- subset(monthly_province_cases, REGION %in% admin1_region_names)
+    provinces_with_cases <- unique(tmp$PROVINCE)
+    boundaries_with_cases <- subset(admin1_boundaries,
+        admin1_boundaries$ADM2_ES %in% provinces_with_cases)
     # Making graph for climate-based model
     log_info("Making graph for climate-based model")
-    province_neighbour_list <- poly2nb(st_make_valid(piura_tumbes_lambayeque_boundaries))
-    nb2INLA(file.path(peru.province.inla.data.in.dir, "nbr_piura_tumbes_lambayeque.graph"),
-        province_neighbour_list)
+    province_neighbour_list <- poly2nb(st_make_valid(admin1_boundaries))
+    nb2INLA(
+        file.path(province.inla.data.in.dir, "nbr_piura_tumbes_lambayeque.graph"),
+        province_neighbour_list
+    )
 
     # Specifying PC Priors (Simpson, 2017) ----
     log_info("Specifying PC Priors (Simpson, 2017)")
@@ -63,10 +65,8 @@ if (FALSE) { # file.exists(p02_filename)) {
     # Setting up lagged variables ----
     log_info("Setting up lagged variables")
     maximum_climate_lag <- 4
-    # ptl_climate_dt_province <- subset(climate_dt_province, REGION %in%
-    # piura_tumbes_lambayeque) climate_dt_province
-    ptl_climate_dt_province <- subset(climate_dt_province, REGION %in% piura_tumbes_lambayeque &
-        PROVINCE %in% piura_tumbes_lambayeque_provinces_with_cases)
+    ptl_climate_dt_province <- subset(climate_dt_province, REGION %in% admin1_region_names &
+        PROVINCE %in% provinces_with_cases)
     length(unique(ptl_climate_dt_province$PROVINCE))
 
     setkeyv(ptl_climate_dt_province, c("YEAR", "MONTH", "PROVINCE"))
@@ -74,7 +74,7 @@ if (FALSE) { # file.exists(p02_filename)) {
 
     # Year-to-year (Historical Diff)
     log_info("Year-to-year (Historical Diff)")
-    tmp <- copy(monthly_province_peru_cases)
+    tmp <- copy(monthly_province_cases)
     tmp[, FUTURE_DIR := Lag(DIR, -12), by = "PROVINCE"]
 
     # For 1 year in training period (i.e. model development period), for 2010
@@ -84,7 +84,7 @@ if (FALSE) { # file.exists(p02_filename)) {
     tmp[, DIFF_WITH_HISTORICAL_DIR_LAG := Lag(DIFF_WITH_HISTORICAL_DIR, 1), by = "PROVINCE"]
     tmp2 <- subset(tmp, select = c("PROVINCE", "TIME", "DIFF_WITH_HISTORICAL_DIR_LAG"))
     setnames(tmp2, "DIFF_WITH_HISTORICAL_DIR_LAG", "MODIFIED_DIFF_WITH_HISTORICAL_DIR_LAG")
-    monthly_province_peru_cases <- merge(monthly_province_peru_cases, tmp2, by = c("PROVINCE",
+    monthly_province_cases <- merge(monthly_province_cases, tmp2, by = c("PROVINCE",
         "TIME"))
 
     # Maximum temperature (Tmax)
@@ -155,8 +155,7 @@ if (FALSE) { # file.exists(p02_filename)) {
     # and forecasting ---- For model development, we will subset this
     # data.table to only include data between 2010 and 2017 (inclusive)
     log_info("Setting up data.table used in wavelet analysis, climate-based modelling, and forecasting")
-    ptl_province_inla_df <- copy(monthly_province_peru_cases)
-    ptl_province_inla_df
+    ptl_province_inla_df <- copy(monthly_province_cases)
     # Merging in areas dt will subset to the provinces in Piura, Tumbes, and
     # Lambayeque that registered cases across 2010-2021
     log_info("Merging in areas dt")
@@ -197,7 +196,7 @@ if (FALSE) { # file.exists(p02_filename)) {
 
     # Momentum Indicator ----
     log_info("Momentum Indicator")
-    tmp <- subset(monthly_province_peru_cases, PROVINCE %in% piura_tumbes_lambayeque_provinces_with_cases)
+    tmp <- subset(monthly_province_cases, PROVINCE %in% provinces_with_cases)
     setkeyv(tmp, c("PROVINCE", "TIME"))
     tmp2 <- tmp[, list(RSI_DIR = RSI(DIR, n = 3)), by = c("PROVINCE")]
     tmp[, RSI_DIR := tmp2$RSI_DIR]
@@ -220,14 +219,41 @@ if (FALSE) { # file.exists(p02_filename)) {
     ptl_province_inla_df[which(is.na(SQ_RSI_DIR_LAG)), SQ_RSI_DIR_LAG := 0]
 
 
+    # --- Map dataset and visualisation ----      JSB: Migrated from province_01.R
 
-    # Merge in LONGITUDE and LATITUDE (for plotting later) ----
+    # Admin-2 centroids
+    peru_adm2 <- geoboundaries("Peru", "adm2", quiet = TRUE)
+    peru_centroids = st_centroid(peru_adm2)
+    coordinates_df <- peru_centroids %>%
+      mutate(coords = st_coordinates(geometry)) %>%
+      mutate(X = coords[,1], Y = coords[,2]) %>%
+      dplyr::select(shapeName, X, Y)
+
+    piura_tumbes_lambayeque <- c("Piura", "Tumbes", "Lambayeque")
+    region_province <- unique(subset(district_peru_cases, select = c("PROVINCE", "REGION")))
+    ptl_region_province <- subset(region_province, REGION %in% piura_tumbes_lambayeque)
+
+    log_info("Map dataset and visualisation")
+    province_peru_dt <- coordinates_df
+    setnames(province_peru_dt, old = "shapeName", new = "PROVINCIA")
+    unique(ptl_region_province$PROVINCE)[which(!(unique(ptl_region_province$PROVINCE) %in%
+        province_peru_dt$PROVINCIA))]  # text output to user to display unmatches provinces
+    # Morropon spelling
+    sort(unique(province_peru_dt$PROVINCIA))
+    # province_peru_dt[which(province_peru_dt$PROVINCIA == "Morropón"), ]$PROVINCIA <- "Morropon"
+    province_peru_dt[which(province_peru_dt$PROVINCIA == "FerreÃ±afe"), ]$PROVINCIA <- "Ferrenafe"
+    ptl_province_dt <- subset(province_peru_dt, PROVINCIA %in% ptl_region_province$PROVINCE)
+    saveRDS(ptl_province_dt, file.path(province.data.dir, "ptl_province_dt.RDS"))
+
+    # --------------------------------------------------------------------------------------
+
+    # Merge in LONGITUDE and LATITUDE (for plotting later) ---- // Move this up top //
     log_info("Merge in LONGITUDE and LATITUDE (for plotting later)")
-    ptl_province_inla_df <- merge(ptl_province_inla_df, subset(ptl_province_peru_dt,
-        select = c("PROVINCIA", "coords_x", "coords_y")), by.x = "PROVINCE", by.y = "PROVINCIA")
-    setnames(ptl_province_inla_df, c("coords_x", "coords_y"), c("longitude", "latitude"))
-    ptl_province_inla_df
+    ptl_province_inla_df <- merge(ptl_province_inla_df, subset(ptl_province_dt,
+        select = c("PROVINCIA", "X", "Y")), by.x = "PROVINCE", by.y = "PROVINCIA")
+    setnames(ptl_province_inla_df, c("X", "Y"), c("longitude", "latitude"))
 
+    # --------------------------------------------------------------------------------------
 
     # Important ************** Set key of data.table ----
     log_info("Set key of data.table")
@@ -245,7 +271,7 @@ if (FALSE) { # file.exists(p02_filename)) {
 
     # Census Data ----
     log_info("Merging in census data")
-    ptl_province_inla_df <- merge(ptl_province_inla_df, unique(subset(monthly_province_peru_cases,
+    ptl_province_inla_df <- merge(ptl_province_inla_df, unique(subset(monthly_province_cases,
         select = c("PROVINCE", "PROPN_URBAN_2017", "PROPN_URBAN_2007"))), by = "PROVINCE")
     ptl_province_inla_df
     tmp <- unique(subset(ptl_province_inla_df, select = c("PROVINCE", "PROPN_URBAN_2017")))
@@ -256,51 +282,19 @@ if (FALSE) { # file.exists(p02_filename)) {
         "URBAN_ORDER")), by = "PROVINCE")
     setkeyv(ptl_province_inla_df, c("TIME", "PROVINCE"))
 
-    ptl_province_peru_dt <- merge(ptl_province_peru_dt, unique(subset(ptl_province_inla_df,
-        select = c("PROPN_URBAN_2007", "PROPN_URBAN_2017", "PROVINCE"))), by.x = "PROVINCIA",
-        by.y = "PROVINCE")
-    ptl_province_peru_dt
-
     # Set key of data.table ----
     log_info("Setting key of data.table")
     setkeyv(ptl_province_inla_df, c("TIME", "PROVINCE"))
 
     # Save ptl
     log_info("Saving ptl_province_inla_df")
-    saveRDS(ptl_province_inla_df, file.path(peru.province.out.dir, "ptl_province_inla_df.RDS"))
+    saveRDS(ptl_province_inla_df, file.path(province.out.dir, "ptl_province_inla_df.RDS"))
     log_info("Saved ptl_province_inla_df")
 
-    log_info("Finished processing Peru province data (02).")
+    log_info("Finished processing province data (02).")
 
     # Save current workspace
     log_info("Saving current workspace...")
     save.image(file = p02_filename)
     log_info("Saved current workspace to ", p02_filename)
 }
-
-
-# Add lines from province_correlations.R
-
-# All times; plot provinces by latitude
-latitude_monthly_dt <- copy(ptl_province_inla_df)
-setkeyv(latitude_monthly_dt, c("latitude", "TIME"))
-latitude_monthly_dt[, PROV_IND := NULL]
-tmp <- unique(subset(latitude_monthly_dt, select = c("PROVINCE")))
-tmp[, LAT_PROV_IND := seq(1, nrow(tmp), by = 1)]
-latitude_monthly_dt <- merge(latitude_monthly_dt, tmp, by = "PROVINCE")
-setkeyv(latitude_monthly_dt, c("latitude", "TIME"))
-latitude_monthly_dt[, SCALED_DIR := scale(DIR), by = "PROVINCE"]
-
-ptl_province_inla_df[, YEAR_DECIMAL := YEAR + (MONTH - 1)/12]
-
-ptl_province_inla_df <- merge(ptl_province_inla_df, unique(subset(latitude_monthly_dt,
-    select = c("LAT_PROV_IND", "PROVINCE"))), by = c("PROVINCE"))
-
-lines_ptl_province_inla_df <- subset(ptl_province_inla_df, select = c("PROVINCE",
-    "REGION", "MONTH", "DIR", "longitude", "latitude"))
-ptl_province_inla_df[, SCALED_DIR := scale(DIR), by = "PROVINCE"]
-ptl_province_inla_df[, LOG_DIR := log(DIR + 0.01)]
-
-ptl_province_inla_df[, LAT_PROV_IND := latitude_monthly_dt$LAT_PROV_IND]
-ptl_province_inla_df[, LONG_PROV_IND := latitude_monthly_dt$LAT_PROV_IND]
-

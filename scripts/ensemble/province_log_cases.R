@@ -58,6 +58,7 @@ scoring_columns <- c(
   "location", "true_value", "model", "target_end_date",
   "quantile", "prediction"
 )
+
 # Load in forecasts ----
 # 1) SARIMA
 log_info("Load SARIMA")
@@ -65,7 +66,7 @@ quantile_sarima_preds_dt <- readRDS(file = file.path(
   peru.province.python.out.dir,
   "quantile_sarima_preds_dt.RDS"
 ))
-quantile_sarima_preds_dt
+
 # 2) TIMEGPT
 log_info("Load TimeGPT")
 quantile_fine_tuned_timegpt_preds_dt <- readRDS(file = file.path(
@@ -75,7 +76,7 @@ quantile_fine_tuned_timegpt_preds_dt <- readRDS(file = file.path(
 quantile_fine_tuned_timegpt_preds_dt <- subset(quantile_fine_tuned_timegpt_preds_dt,
   select = scoring_columns
 )
-quantile_fine_tuned_timegpt_preds_dt
+
 # 3) DEEPTCN
 log_info("Load DeepTCN")
 quantile_tcn_preds_dt <- readRDS(file = file.path(
@@ -94,7 +95,6 @@ quantile_finetuned_no_covars_timegpt_preds_dt <- readRDS(file = file.path(
 quantile_finetuned_no_covars_timegpt_preds_dt <- subset(quantile_finetuned_no_covars_timegpt_preds_dt,
   select = scoring_columns
 )
-quantile_finetuned_no_covars_timegpt_preds_dt
 
 # 5) Climate
 log_info("Load climate")
@@ -112,7 +112,6 @@ setnames(
 climate_2018_2021_log_cases_quantile_dt <- subset(climate_2018_2021_log_cases_quantile_dt,
   select = scoring_columns
 )
-climate_2018_2021_log_cases_quantile_dt
 
 # 6)Baseline
 log_info("Baseline")
@@ -230,7 +229,6 @@ iteratively_train_quantile_ensemble <- function(quantiles,
   return(ovr_model_weights_dt)
 }
 
-
 # JSB
 num_pred_points <- nrow(ptl_province_2018_2021_data)
 input_quantile_dt <- copy(quantile_log_cases_components_dt)
@@ -248,21 +246,7 @@ setkeyv(input_quantile_dt, c("location", "model", "target_end_date", "quantile")
 number_testing_dates = length(unique(pred_points_dt$target_end_date))
 true_log_cases_data <- copy(ptl_province_inla_df)
 
-
-
-
-
 min_date <- min(input_quantile_dt$target_end_date)
-# Redundant code:
-# log_info("iteratively_trained_weights_log_cases_dt (1)")
-# iteratively_trained_weights_log_cases_dt <- iteratively_train_quantile_ensemble(
-#   quantiles = quantiles,
-#   number_testing_dates = number_testing_dates,
-#   input_quantile_dt = input_quantile_dt[which(target_end_date > min_date)],
-#   pred_points_dt,
-#   historical_input_quantile_dt = input_quantile_dt[which(target_end_date == min_date)],
-#   true_log_cases_data
-# )
 
 log_info(paste0("iteratively_trained_weights_", metric_name, "_dt (2)"))
 iteratively_trained_weights_log_cases_dt <- iteratively_train_quantile_ensemble(
@@ -277,8 +261,6 @@ iteratively_trained_weights_log_cases_dt
 saveRDS(iteratively_trained_weights_log_cases_dt,
   file = file.path(peru.province.out.dir, paste0("iteratively_trained_weights_",metric_name ,"_dt.RDS"))
 )
-
-# iteratively_trained_weights_log_cases_dt <- readRDS(file = file.path(peru.province.out.dir, "iteratively_trained_weights_log_cases_dt.RDS"))
 
 iteratively_trained_weights_log_cases_dt[, model_factor := factor(model)]
 iteratively_trained_weights_log_cases_dt[, target_end_date := as.Date(target_end_date)]
@@ -321,14 +303,9 @@ iteratively_trained_weights_dt_by_province <- iteratively_train_quantile_ensembl
   data_field = metric_field
 )
 iteratively_trained_weights_dt_by_province
-# Merge in DIR  + Check outbreak 50 threshold
-
-
 
 # WIS over time (expanding window) ----
 unique(quantile_log_cases_components_dt$target_end_date)
-
-
 
 # Use later (move to outbreak_functions script) ----
 log_info("WIS expanding window")
@@ -372,10 +349,10 @@ wis_expanding_window_over_time <- function(models_dt,
 wis_expanding_results <- wis_expanding_window_over_time(quantile_log_cases_components_dt,
   times = unique(quantile_log_cases_components_dt$target_end_date)
 )
-
 wis_expanding_results_spatially_homoegenous <- wis_expanding_results[[1]]
 wis_expanding_results_space_dependent <- wis_expanding_results[[2]]
 wis_expanding_results_space_dependent
+
 # 1) Iterative WIS-based weighting (Spatially homogeneous)
 # Add equal weight for first month
 tmp <- subset(
@@ -384,16 +361,10 @@ tmp <- subset(
 )
 tmp[, weight := 1 / length(unique(model))]
 tmp[, effective_time := min(quantile_log_cases_components_dt$target_end_date)]
-tmp
 wis_expanding_results_spatially_homoegenous <- rbind(tmp, wis_expanding_results_spatially_homoegenous)
 wis_expanding_results_spatially_homoegenous[, model_factor := factor(model)]
-# wis_expanding_results_spatially_homoegenous[, effective_time:= as.Date(effective_time)]
 wis_expanding_results_spatially_homoegenous[, target_end_date := as.Date(effective_time)]
 wis_expanding_results_spatially_homoegenous$weight
-# ggplot(wis_expanding_results_spatially_homoegenous) +
-#   geom_line(aes(x = target_end_date, y = interval_score, color = model_factor)) +
-#   theme_bw() +
-#   theme(legend.position = "bottom")
 
 
 find_quantile_violations <- function(df) {
@@ -434,10 +405,8 @@ fix_quantile_violations <- function(df, tolerance = 1e-8) {
 
 # WIS over time (Rolling Window) ----
 log_info("WIS rolling window")
-wis_rolling_window_over_time <- function(models_dt,
-                                         times) {
+wis_rolling_window_over_time <- function(models_dt, times) {
   # times <- unique(models_dt$target_end_date)
-  # print(times)
   score_summary <- NULL
   score_summary_by_location <- NULL
   runner_windows_list <- runner(times, k = 3)
@@ -501,101 +470,6 @@ write.csv(wis_province,
     row.names=FALSE)
 log_info("Written WIS over time (rolling window).")
 
-# mean_rolling_wis_by_location <-
-#   wis_expanding_results_spatially_homoegenous[, list(MEAN = mean(interval_score)),
-#     by = c("model_factor", "location")
-#   ]
-# ggplot(mean_rolling_wis_by_location) +
-#   geom_col(aes(x = MEAN, y = model_factor, fill = model_factor)) +
-#   theme_bw() +
-#   facet_wrap(location ~ .,
-#     scales = "free_x"
-#   ) +
-#   theme(legend.position = "bottom")
-# tmp <- subset(
-#   ptl_province_2018_2021_data,
-#   PROVINCE == "Ayabaca"
-# )
-# tmp[which(CASES > 1)]
-# ggplot(tmp, aes(x = TIME, y = CASES)) +
-#   geom_line()
-# wis_expanding_results_spatially_homoegenous <-
-#   merge(wis_expanding_results_spatially_homoegenous,
-#     unique(subset(input_quantile_dt,
-#       select = c(
-#         "model", "target_end_date", "location", "true_value",
-#         "prediction", "quantile"
-#       )
-#     )),
-#     by = c("model", "target_end_date")
-#   )
-# setkeyv(weighted_quantile_dt, c("location", "IND"))
-# weighted_quantile_dt[, true_value := round(true_value, digits = 8)]
-# weighted_quantile_dt
-# weighted_quantile_dt <- unique(weighted_quantile_dt)
-# weighted_quantile_dt
-# weighted_quantile_dt[, TRAINED_WEIGHT := Lag(weights, 1), by = c("location", "model", "quantile")]
-# weighted_quantile_dt[which(target_end_date == min(target_end_date)), TRAINED_WEIGHT := 1 / length(unique(model))]
-# weighted_quantile_dt
-# weighted_quantile_forecasts_2018_2021_dt <-
-#   weighted_quantile_dt[, list(
-#     prediction = sum(TRAINED_WEIGHT * prediction),
-#     true_value = unique(true_value)
-#   ),
-#   by = c("location", "quantile", "target_end_date")
-#   ]
-# weighted_quantile_forecasts_2018_2021_dt[which(quantile == 0.5), caret::R2(prediction, true_value)]
-# weighted_quantile_forecasts_2018_2021_dt[which(quantile == 0.5), caret::MAE(prediction, true_value)]
-# weighted_quantile_forecasts_2018_2021_dt[, model := "pinball_trained_ensemble"]
-# weighted_quantile_forecasts_2018_2021_dt %>%
-#   score() %>%
-#   summarise_scores(by = c("model"))
-# 
-# ggplot(
-#   wis_expanding_results_space_dependent,
-#   aes(x = effective_time, y = interval_score, color = model)
-# ) +
-#   geom_line() +
-#   theme_bw() +
-#   facet_wrap(location ~ ., scales = "free_y")
-
-
-
-# # WIS at individual times
-# log_info("WIS individual times")
-# wis_by_time_points <- function(models_dt) {
-#   score_summary <- models_dt %>%
-#     score() %>%
-#     summarise_scores(by = c("model", "target_end_date"))
-#   return(score_summary)
-# }
-# tmp <- wis_by_time_points(quantile_log_cases_components_dt)
-# tmp[, target_end_date := as.Date(target_end_date)]
-# tmp
-# ggplot(tmp) +
-#   geom_line(aes(
-#     x = target_end_date, y = interval_score,
-#     color = model
-#   )) +
-#   theme(legend.position = "bottom")
-# 
-# 
-# 
-# wis_by_location <- function(models_dt) {
-#   score_summary <- models_dt %>%
-#     score() %>%
-#     summarise_scores(by = c("model", "location"))
-#   return(score_summary)
-# }
-# tmp <- wis_by_location(input_quantile_dt)
-# tmp[, model_factor := as.factor(model)]
-# tmp
-# ggplot(tmp) +
-#   geom_point(aes(x = model_factor, y = interval_score)) +
-#   facet_wrap(location ~ ., ) +
-#   theme(legend.position = "bottom")
-
-
 # Historical models ----
 quantile_baseline_log_cases.pred_dt_2010_2018 <- readRDS(file = file.path(
   peru.province.out.dir,
@@ -654,7 +528,6 @@ historical_quantile_log_cases_components_dt <- rbind(
 )
 historical_quantile_log_cases_components_dt[which(prediction < 0), prediction := 0]
 historical_quantile_log_cases_components_dt[, target_end_date := as.Date(target_end_date)]
-# historical_quantile_log_cases_components_dt[, length(unique(model))]
 
 # EW-NoC
 # Median-NoC
@@ -683,69 +556,11 @@ historical_quantile_log_cases_components_dt %>%
   score() %>%
   summarise_scores(by = "model")
 
-# quantiles_random_forest_for_scoring <- readRDS(file = file.path(peru.province.xgb.out.dir,
-#                  paste0("quantiles_random_forest_for_scoring.RDS")))
-# quantiles_random_forest_for_scoring <- subset(quantiles_random_forest_for_scoring,
-#                                               select = scoring_columns)
-# quantiles_random_forest_for_scoring
-
-
 # Form untrained ensembles ----
 historical_quantile_log_cases_components_plus_ensembles_dt <-
   form_untrained_ensembles(historical_quantile_log_cases_components_dt)
 historical_quantile_log_cases_components_plus_ensembles_dt[, length(prediction), by = "model"]
 head(historical_quantile_log_cases_components_plus_ensembles_dt, 10)
-
-
-
-
-# # Ignore ----
-# tmp <- form_untrained_ensembles(historical_quantile_log_cases_components_dt)
-# head(tmp, 10)
-# # Score
-# historical_quantile_log_cases_components_plus_ensembles_dt_scores <- historical_quantile_log_cases_components_plus_ensembles_dt %>%
-#   score() %>%
-#   summarise_scores(by = c("model"))
-# 
-# historical_quantile_log_cases_components_plus_ensembles_dt_scores[order(interval_score)]
-# 
-# # Coverage
-# tmp <- process_summary_predictions(summary_predictions(historical_quantile_log_cases_components_plus_ensembles_dt))
-# tmp
-# process_quantile_predictions(historical_quantile_log_cases_components_plus_ensembles_dt)
-# 
-# # Add in extra details (e.g. LAT_PROV_IND)
-# historical_quantile_log_cases_components_plus_ensembles_dt_for_plotting <-
-#   merge(historical_quantile_log_cases_components_plus_ensembles_dt,
-#     unique(subset(ptl_province_inla_df, select = c("PROVINCE", "LAT_PROV_IND"))),
-#     by.x = "location", by.y = "PROVINCE"
-#   )
-# 
-# 
-# historical_quantile_log_cases_components_plus_ensembles_dt_for_plotting %>%
-#   score() %>%
-#   summarise_scores(by = c("model", "quantile")) %>%
-#   plot_quantile_coverage() + geom_line(aes(y = quantile_coverage), linewidth = 1.5, alpha = 0.6) +
-#   facet_wrap(model ~ ., ) +
-#   theme(
-#     text = element_text(size = 32),
-#     axis.text.x = element_text(size = 32),
-#     axis.text.y = element_text(size = 32),
-#     panel.grid.minor.y = element_blank(),
-#     panel.grid.minor.x = element_blank(),
-#     panel.grid.major.y = element_blank(),
-#     panel.grid.major.x = element_blank(),
-#     plot.title = element_text(face = "bold", hjust = 0.5),
-#     plot.subtitle = element_blank(),
-#     axis.title = element_text(size = 32),
-#     legend.text = element_text(size = 24),
-#     legend.position = "bottom"
-#   ) +
-#   guides(color = guide_legend("Model"))
-
-
-
-
 
 # Form trained ensembles -----
 log_info("Form trained ensembles")
@@ -757,14 +572,9 @@ combined_quantile_log_cases_components_dt <- rbind(
   quantile_log_cases_components_dt
 )
 input_quantile_dt <- copy(combined_quantile_log_cases_components_dt)
-# num_pred_points <- nrow(ptl_province_2018_2021_data)
 setkeyv(input_quantile_dt, c("location", "model", "target_end_date", "quantile"))
 num_ensemble_components <- length(unique(input_quantile_dt$model))
 num_quantile_levels <- length(quantiles)
-# pred_points_dt <- unique(subset(quantile_log_cases_components_dt,
-#                                 select = c("location", "model", "target_end_date")))
-# setkeyv(pred_points_dt, c("model","location", "target_end_date"))
-# pred_points_dt[, IND:= seq(1, length(target_end_date)), by = "model"]
 
 input_quantile_dt[, target_end_date := as.Date(target_end_date)]
 input_quantile_dt[, lagged_date := as.Date(Lag(target_end_date, 11)), by = c("location", "model", "quantile")]
@@ -777,9 +587,7 @@ dates <- (unique(input_quantile_dt[which(in_testing == 1)]$target_end_date))
 number_dates <- length(unique(input_quantile_dt[which(in_testing == 1)]$target_end_date))
 lagged_dates <- unique(input_quantile_dt[which(in_testing == 1)]$lagged_date)
 lagged_dates
-# input_quantile_dt <- merge(input_quantile_dt,pred_points_dt, by = c("model","location", "target_end_date"))
-# setkeyv(input_quantile_dt, c("location", "model","target_end_date", "quantile"))
-# input_quantile_dt
+
 true_log_cases_data <- copy(ptl_province_inla_df)
 true_log_cases_data <- subset(true_log_cases_data, end_of_month >= max_date)
 setkeyv(true_log_cases_data, c("PROVINCE", "end_of_month"))
@@ -893,20 +701,9 @@ saveRDS(runner_trained_ensemble_weights_quantile_log_cases_dt,
 runner_trained_ensemble_weights_quantile_log_cases_dt <- readRDS(file = file.path(peru.province.out.dir, paste0("runner_trained_ensemble_weights_quantile_", metric_name, "_dt.RDS")))
 runner_trained_ensemble_weights_quantile_log_cases_dt
 
-
 runner_trained_ensemble_weights_quantile_log_cases_dt[, model_factor := factor(model)]
 runner_trained_ensemble_weights_quantile_log_cases_dt[, target_end_date := as.Date(target_end_date)]
 
-# p1 <- ggplot(runner_trained_ensemble_weights_quantile_log_cases_dt) +
-#   geom_line(aes(x = target_end_date, y = weights, color = model_factor)) +
-#   theme_bw() +
-#   theme(legend.position = "bottom")
-
-# p2 <- ggplot(ptl_province_2018_2021_data) +
-#   geom_boxplot(aes(x = end_of_month, y = LOG_CASES)) +
-#   theme_bw() +
-#   theme(legend.position = "bottom")
-# p2
 tmp <- copy(runner_trained_ensemble_weights_quantile_log_cases_dt)
 tmp[, target_end_date := Lag(target_end_date, -1), by = c("model")]
 tmp
@@ -954,9 +751,6 @@ find_quantile_violations <- function(df) {
 # Shows that violations are on the order of e-18
 find_quantile_violations(trained_ensemble_quantile_log_cases_forecasts_2018_2021_dt)
 
-
-
-
 # By province
 log_info("By province")
 provinces <- unique(combined_quantile_log_cases_components_dt$location)
@@ -1003,29 +797,12 @@ for (i in 1:length(provinces)) {
     )
 }
 
-
 saveRDS(runner_trained_ensemble_weights_by_province_quantile_log_cases_dt,
   file = file.path(peru.province.out.dir, paste0("runner_trained_ensemble_weights_by_province_quantile_", metric_name, "_dt.RDS"))
 )
 
 runner_trained_ensemble_weights_by_province_quantile_log_cases_dt[, model_factor := factor(model)]
 runner_trained_ensemble_weights_by_province_quantile_log_cases_dt[, target_end_date := as.Date(target_end_date)]
-
-# p1 <- ggplot(runner_trained_ensemble_weights_by_province_quantile_log_cases_dt) +
-#   geom_line(aes(x = target_end_date, y = weights, color = model_factor)) +
-#   theme_bw() +
-#   facet_wrap(location ~ ., ) +
-#   theme(legend.position = "bottom")
-# p1
-# p2 <- ggplot(ptl_province_2018_2021_data) +
-#   geom_boxplot(aes(x = end_of_month, y = LOG_CASES)) +
-#   theme_bw() +
-#   theme(legend.position = "bottom")
-# p2
-# ggplot(runner_trained_ensemble_weights_by_province_quantile_log_cases_dt) +
-#   geom_boxplot(aes(x = model_factor, y = weights, color = model_factor)) +
-#   facet_wrap(location ~ ., ) +
-#   theme(legend.position = "bottom")
 
 summary_province_dependent_weights_by_province <-
   runner_trained_ensemble_weights_by_province_quantile_log_cases_dt[, list(
@@ -1034,7 +811,6 @@ summary_province_dependent_weights_by_province <-
   ),
   by = c("location", "model")
   ]
-# ggplot(summary_province_dependent_weights_by_province, aes(x = model, y = median))
 
 
 runner_trained_ensemble_weights_by_province_quantile_log_cases_dt
@@ -1063,19 +839,11 @@ trained_ensemble_by_province_quantile_log_cases_forecasts_2018_2021_dt <-
 trained_ensemble_by_province_quantile_log_cases_forecasts_2018_2021_dt[which(quantile == 0.5), caret::R2(prediction, true_value)]
 trained_ensemble_by_province_quantile_log_cases_forecasts_2018_2021_dt[which(quantile == 0.5), caret::MAE(prediction, true_value)]
 trained_ensemble_by_province_quantile_log_cases_forecasts_2018_2021_dt[, model := "pinball_trained_ensemble_by_province"]
-# JSB: 'predictions must be increasing with quantiles'
-# trained_ensemble_by_province_quantile_log_cases_forecasts_2018_2021_dt %>%
-#   score() %>%
-#   summarise_scores(by = c("model"))
 
 trained_ensemble_by_province_quantile_log_cases_forecasts_2018_2021_dt$prediction <- log1p(exp(trained_ensemble_by_province_quantile_log_cases_forecasts_2018_2021_dt$prediction) - 1)
 
 # Shows that violations are on the order of e-16
 find_quantile_violations(trained_ensemble_by_province_quantile_log_cases_forecasts_2018_2021_dt)
-
-# tmp <- process_summary_predictions(summary_predictions(trained_ensemble_by_province_quantile_log_cases_forecasts_2018_2021_dt))
-# tmp
-
 
 
 # Merge in trained approaches ----
@@ -1097,43 +865,27 @@ quantile_log_cases_components_plus_ensembles_dt[, length(prediction), by = "mode
 
 # FIX NAMES ----
 original_model_names <- sort(unique(quantile_log_cases_components_plus_ensembles_dt$model))
-original_model_names
 new_model_names <- c(
   "Baseline", "Bayes-Climate", "EW-Mean *", "EW-Mean-NoBase *", "Ew-Mean-NoBayes *", "EW-Mean-NoCov *", "TimeGPT",
   "TimeGPT-NoCov ", "Median *", "Median-NoBase *", "Median-NoBayes *",
   "Median-NoCov *", "Trained *", "Prov-Trained *", "SARIMA", "TCN"
 )
-new_model_names
-# extract hex color codes for a plot with three elements in ggplot2
-hex <- hue_pal()(length(new_model_names))
 historical_original_model_names <- sort(unique(historical_quantile_log_cases_components_plus_ensembles_dt$model))
-historical_original_model_names
 historical_new_model_names <- c(
   "Baseline", "Bayes-Climate", "EW-Mean *", "EW-Mean-NoBase *", "EW-Mean-NoBayes *", "EW-Mean-NoCov *", "TimeGPT",
   "TimeGPT-NoCov ", "Median *", "Median-NoBase *", "Median-NoBayes *",
   "Median-NoCov *", "SARIMA", "TCN"
 )
-historical_new_model_names
-historical_model_colours <- hex[which(new_model_names %in% historical_new_model_names)]
-show_col(historical_model_colours)
-# setkey(quantile_log_cases_components_plus_ensembles_coverage_dt, "model")
 quantile_log_cases_components_plus_ensembles_dt[, model := factor(model,
   labels = new_model_names
 )]
-
-
 
 historical_quantile_log_cases_components_plus_ensembles_dt[, model := factor(model,
   labels = historical_new_model_names
 )]
 historical_quantile_log_cases_components_plus_ensembles_dt
 setkey(quantile_log_cases_components_plus_ensembles_dt, "model")
-
 setkey(historical_quantile_log_cases_components_plus_ensembles_dt, "model")
-# historical_quantile_log_cases_components_plus_ensembles_dt[, model_factor := NULL]
-
-
-
 
 # Write model predictions (quantiles) out
 for (name in historical_new_model_names) {
@@ -1161,20 +913,10 @@ for (name in historical_new_model_names) {
         row.names=FALSE)
 }
 
-
-
-
-
-
-
-
 # INSERT LATITUDE AND LONGITUDE INDICATORS ----
-
 
 latitude_monthly_dt <- copy(ptl_province_inla_df)
 setkeyv(latitude_monthly_dt, c("latitude", "longitude", "TIME"))
-#latitude_monthly_dt[, LAT_PROV_IND:= NULL]
-#latitude_monthly_dt[, LONG_PROV_IND:= NULL]
 tmp <- unique(subset(latitude_monthly_dt, select = c("PROVINCE")))
 tmp[, LAT_PROV_IND:= seq(1, nrow(tmp), by = 1)]
 tmp[, LONG_PROV_IND:= seq(1, nrow(tmp), by = 1)]
@@ -1218,261 +960,5 @@ quantile_log_cases_components_plus_ensembles_dt <-
     tmp,
     by.y = "PROVINCE", by.x = "location"
   )
-
-
-
-
-
-# # All figures and tables ----
-# log_info("Figures and tables")
-# 
-# # Score
-# quantile_log_cases_components_plus_ensembles_dt_scores <- quantile_log_cases_components_plus_ensembles_dt %>%
-#   score() %>%
-#   summarise_scores(by = c("model"))
-# quantile_log_cases_components_plus_ensembles_dt_scores[order(interval_score)]
-# quantile_log_cases_components_plus_ensembles_dt_scores[order(coverage_deviation)]
-# quantile_log_cases_components_plus_ensembles_dt_scores_by_location <- quantile_log_cases_components_plus_ensembles_dt %>%
-#   score() %>%
-#   summarise_scores(by = c("model", "location"))
-# quantile_log_cases_components_plus_ensembles_dt
-# tmp <- quantile_log_cases_components_plus_ensembles_dt %>% score()
-# tmp[, length(unique(model))]
-# summarised_wis_quantile_log_cases_by_province <- tmp[, list(
-#   mean_interval_score = mean(interval_score),
-#   median_interval_score = median(interval_score),
-#   interval_score_ci_l = quantile(interval_score, probs = 0.25),
-#   interval_score_ci_u = quantile(interval_score, probs = 0.75)
-# ), by = c("model", "location")]
-# summarised_wis_quantile_log_cases_by_province[, model_factor := as.factor(model)]
-# 
-# ggplot(summarised_wis_quantile_log_cases_by_province) +
-#   geom_errorbar(aes(
-#     x = model_factor, ymin = interval_score_ci_l, ymax = interval_score_ci_u,
-#     color = model_factor
-#   )) +
-#   geom_point(aes(x = model_factor, y = median_interval_score)) +
-#   theme_bw() +
-#   facet_wrap(location ~ ., scales = "free_y") +
-#   theme(legend.position = "bottom")
-# 
-# 
-# quantile_log_cases_components_plus_ensembles_dt_scores_by_location %>% plot_heatmap(x = "location", metric = "interval_score")
-# quantile_log_cases_components_plus_ensembles_dt_scores[order(interval_score)]
-# tmp <- process_summary_predictions(summary_predictions(quantile_log_cases_components_plus_ensembles_dt))
-# quantile_log_cases_components_plus_ensembles_performance_dt <-
-#   process_quantile_predictions(quantile_log_cases_components_plus_ensembles_dt)
-# quantile_log_cases_components_plus_ensembles_performance_dt[order(r2, decreasing = TRUE)]
-# quantile_log_cases_components_plus_ensembles_coverage_dt <-
-#   process_summary_predictions(summary_predictions(quantile_log_cases_components_plus_ensembles_dt))
-# quantile_log_cases_components_plus_ensembles_coverage_dt[order(COVERAGE, decreasing = TRUE)]
-# 
-# 
-# # Coverage Plots
-# log_info("Coverage plots")
-# 
-# 
-# # Quantile
-# quantile_coverage_function(quantile_log_cases_components_plus_ensembles_dt,
-#   "quantile_log_cases_components_plus_ensembles",
-#   historical = FALSE
-# )
-# quantile_coverage_function(historical_quantile_log_cases_components_plus_ensembles_dt,
-#   "historical_quantile_log_cases_components_plus_ensembles",
-#   historical = TRUE
-# )
-# # Interval
-# quantile_log_cases_interval_coverage_dt <-
-#   interval_coverage_function(quantile_log_cases_components_plus_ensembles_dt,
-#     "quantile_log_cases_components_plus_ensembles",
-#     historical = FALSE
-#   )
-# 
-# historical_quantile_log_cases_interval_coverage_dt <- interval_coverage_function(historical_quantile_log_cases_components_plus_ensembles_dt,
-#   "historical_quantile_log_cases_components_plus_ensembles",
-#   historical = TRUE
-# )
-# 
-# # Plot WIS ----
-# log_info("Plot WIS")
-# rolling_wis_quantile_log_cases_components_plus_ensembles_dt <-
-#   wis_rolling_window_over_time(quantile_log_cases_components_plus_ensembles_dt,
-#     times = unique(quantile_log_cases_components_plus_ensembles_dt$target_end_date)
-#   )
-# 
-# rolling_wis_quantile_log_cases_components_plus_ensembles_summary_dt <- rolling_wis_quantile_log_cases_components_plus_ensembles_dt[[1]]
-# rolling_wis_quantile_log_cases_components_plus_ensembles_summary_dt[, model_factor := factor(model, levels = new_model_names)]
-# rolling_wis_quantile_log_cases_components_plus_ensembles_summary_dt[, target_end_date := as.Date(centering_date)]
-# rolling_wis_quantile_log_cases_components_plus_ensembles_summary_dt
-# 
-# baseline_dt <- subset(rolling_wis_quantile_log_cases_components_plus_ensembles_summary_dt, model == "Baseline")
-# baseline_dt <- subset(baseline_dt, select = c("interval_score", "target_end_date"))
-# setnames(baseline_dt, "interval_score", "baseline_interval_score")
-# rolling_wis_quantile_log_cases_components_plus_ensembles_summary_dt <- merge(rolling_wis_quantile_log_cases_components_plus_ensembles_summary_dt,
-#   baseline_dt,
-#   by = "target_end_date"
-# )
-# rolling_wis_quantile_log_cases_components_plus_ensembles_summary_dt[, scaled_relative_skill := interval_score / baseline_interval_score]
-# setkeyv(rolling_wis_quantile_log_cases_components_plus_ensembles_summary_dt, "model")
-# rolling_wis_quantile_log_cases_components_plus_ensembles_summary_dt
-# rolling_wis_quantile_log_cases_components_plus_ensembles_summary_dt[, width := ifelse(model == "Median *", 0.75, 0.6)]
-# # setkeyv(rolling_wis_quantile_log_cases_components_plus_ensembles_summary_dt,
-# #         c("model"))
-# rolling_wis_quantile_log_cases_components_plus_ensembles_summary_dt
-# rolling_wis_quantile_log_cases_components_plus_ensembles_summary_dt
-# rolling_wis_plot_over_time <- ggplot(rolling_wis_quantile_log_cases_components_plus_ensembles_summary_dt) +
-#   geom_line(aes(x = target_end_date, y = scaled_relative_skill, colour = model_factor),
-#     linewidth = 1.1
-#   ) +
-#   theme_bw() +
-#   gghighlight::gghighlight(model_factor == "Median *",
-#     use_direct_label = FALSE,
-#     unhighlighted_params = list(colour = NULL, alpha = 0.35)
-#   ) +
-#   labs(x = "Year", y = "Relative WIS (log scale)") +
-#   theme(
-#     text = element_text(size = 30),
-#     axis.text.x = element_text(size = 22),
-#     axis.text.y = element_text(size = 22),
-#     panel.grid.minor.y = element_blank(),
-#     panel.grid.minor.x = element_blank(),
-#     panel.grid.major.y = element_blank(),
-#     panel.grid.major.x = element_blank(),
-#     plot.title = element_text(face = "bold", hjust = 0.5),
-#     plot.subtitle = element_blank(),
-#     axis.title = element_text(size = 24),
-#     legend.text = element_text(size = 24),
-#     legend.position = "bottom",
-#     plot.margin = unit(c(1, 1, 1, 1), "cm")
-#   ) +
-#   guides(color = guide_legend("Model", override.aes = list(linewidth = 1.2, alpha = 0.5)))
-# rolling_wis_plot_over_time
-# # geom_line(tmp, aes(x = target_end_date, y = scaled_rel_skill, color = model, linewidth = 1.5))
-# setkeyv(rolling_wis_quantile_log_cases_components_plus_ensembles_summary_dt, c("target_end_date", "model"))
-# model_ind <- rolling_wis_quantile_log_cases_components_plus_ensembles_summary_dt[, list(MODEL_IND = which.min(interval_score)), by = "target_end_date"]
-# model_dt <- data.table(model = unique(rolling_wis_quantile_log_cases_components_plus_ensembles_summary_dt$model))
-# model_dt[, MODEL_IND := seq(1, nrow(model_dt))]
-# model_ind <- merge(model_ind,
-#   model_dt,
-#   by = "MODEL_IND"
-# )
-# setkeyv(model_ind, "target_end_date")
-# model_ind
-# tmp <- (ptl_province_2018_2021_data[, list(MEAN_LOG_CASES = mean(LOG_CASES)), by = "end_of_month"])
-# tmp[, end_of_month := as.Date(end_of_month)]
-# ggplot(tmp) +
-#   geom_line(aes(x = end_of_month, y = MEAN_LOG_CASES)) +
-#   theme_bw()
-# 
-# 
-# ggplot(rolling_wis_quantile_log_cases_components_plus_ensembles_summary_dt) +
-#   geom_col(aes(x = model_factor, y = interval_score, fill = model_factor)) +
-#   theme_bw() +
-#   facet_wrap(target_end_date ~ ., scales = "free_y") +
-#   theme(legend.position = "bottom")
-# 
-# rolling_wis_quantile_log_cases_components_plus_ensembles_summary_dt_by_location <-
-#   rolling_wis_quantile_log_cases_components_plus_ensembles_dt[[2]]
-# rolling_wis_quantile_log_cases_components_plus_ensembles_summary_dt_by_location[, centering_date := as.Date(centering_date)]
-# rolling_wis_quantile_log_cases_components_plus_ensembles_summary_dt_by_location[, model_factor := factor(model,
-#   levels = new_model_names
-# )]
-# rolling_wis_quantile_log_cases_components_plus_ensembles_summary_dt_by_location
-# rolling_wis_quantile_log_cases_components_plus_ensembles_summary_dt_by_location
-# ggplot(rolling_wis_quantile_log_cases_components_plus_ensembles_summary_dt_by_location) +
-#   geom_line(aes(x = centering_date, y = interval_score, color = model_factor)) +
-#   theme_bw() +
-#   facet_wrap(location ~ .,
-#     scales = "free_y"
-#   ) +
-#   theme(legend.position = "bottom")
-# 
-# rolling_wis_quantile_log_cases_components_plus_ensembles_summary_dt_by_location
-# baseline_dt <- subset(
-#   rolling_wis_quantile_log_cases_components_plus_ensembles_summary_dt_by_location,
-#   model == "Baseline"
-# )
-# baseline_dt <- subset(baseline_dt, select = c("interval_score", "centering_date", "location"))
-# baseline_dt
-# setnames(baseline_dt, "interval_score", "baseline_interval_score")
-# rolling_wis_quantile_log_cases_components_plus_ensembles_summary_dt_by_location <-
-#   merge(rolling_wis_quantile_log_cases_components_plus_ensembles_summary_dt_by_location,
-#     baseline_dt,
-#     by = c("centering_date", "location")
-#   )
-# rolling_wis_quantile_log_cases_components_plus_ensembles_summary_dt_by_location[, scaled_relative_skill := interval_score / baseline_interval_score]
-# rolling_wis_quantile_log_cases_components_plus_ensembles_summary_dt_by_location$scaled_relative_skill
-# 
-# rolling_wis_plot_over_time_by_location <- ggplot(rolling_wis_quantile_log_cases_components_plus_ensembles_summary_dt_by_location) +
-#   geom_line(aes(x = centering_date, y = scaled_relative_skill, colour = model_factor),
-#     linewidth = 0.8
-#   ) +
-#   theme_bw() +
-#   gghighlight::gghighlight(model_factor == "Median *",
-#     use_direct_label = FALSE,
-#     unhighlighted_params = list(colour = NULL, alpha = 0.3)
-#   ) +
-#   facet_wrap(location ~ ., ) +
-#   labs(x = "Year", y = "Relative WIS (log scale)") +
-#   theme(
-#     text = element_text(size = 30),
-#     axis.text.x = element_text(size = 22),
-#     axis.text.y = element_text(size = 22),
-#     panel.grid.minor.y = element_blank(),
-#     panel.grid.minor.x = element_blank(),
-#     panel.grid.major.y = element_blank(),
-#     panel.grid.major.x = element_blank(),
-#     plot.title = element_text(face = "bold", hjust = 0.5),
-#     plot.subtitle = element_blank(),
-#     axis.title = element_text(size = 24),
-#     legend.text = element_text(size = 24),
-#     legend.position = "bottom",
-#     plot.margin = unit(c(1, 1, 1, 1), "cm")
-#   ) +
-#   guides(color = guide_legend("Model", override.aes = list(linewidth = 0.9)))
-# rolling_wis_plot_over_time_by_location
-# 
-# 
-# 
-# 
-# 
-# rolling_wis_violin_plot_by_location <- ggplot(rolling_wis_quantile_log_cases_components_plus_ensembles_summary_dt_by_location) +
-#   geom_violin(aes(x = interval_score, y = model_factor, fill = model_factor),
-#     alpha = 0.8
-#   ) +
-#   theme_bw() +
-#   # gghighlight::gghighlight(model_factor == "Median *", use_direct_label = FALSE,
-#   #                          unhighlighted_params = list(colour = NULL, alpha = 0.3))+
-#   facet_wrap(location ~ ., ) +
-#   labs(x = "WIS (log scale)") +
-#   theme(
-#     axis.title.y = element_blank(),
-#     axis.text.y = element_blank(),
-#     axis.ticks.y = element_blank()
-#   ) +
-#   theme(
-#     text = element_text(size = 30),
-#     panel.grid.minor.y = element_blank(),
-#     panel.grid.minor.x = element_blank(),
-#     panel.grid.major.y = element_blank(),
-#     panel.grid.major.x = element_blank(),
-#     plot.title = element_text(face = "bold", hjust = 0.5),
-#     plot.subtitle = element_blank(),
-#     axis.title = element_text(size = 24),
-#     legend.text = element_text(size = 24),
-#     legend.position = "right",
-#     plot.margin = unit(c(1, 1, 1, 1), "cm")
-#   ) +
-#   guides(fill = guide_legend("Model", override.aes = list(alpha = 0.8)))
-# rolling_wis_violin_plot_by_location
-# ggsave(rolling_wis_violin_plot_by_location,
-#   file = file.path(
-#     peru.province.ensemble.out.dir,
-#     "rolling_wis_violin_plot_by_location.pdf"
-#   ),
-#   h = 22, w = 22
-# )
-
-# wis_historic <- wis_rolling_window_over_time(historical_quantile_log_cases_components_plus_ensembles_dt, times=unique(historical_quantile_log_cases_components_plus_ensembles_dt$target_end_date))
 
 log_info(paste0("Finished province_log_cases.R for metric: ", metric_name))

@@ -4,4 +4,12 @@ colorcet
 streamlit
 pillow
 seaborn
+
 openai
+python-dotenv
+langchain
+langchain-community
+langchain-huggingface
+langchain-openai
+faiss-cpu
+sentence-transformers
