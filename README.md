@@ -74,6 +74,3 @@ To run the pipeline you will need a container service such as docker. Run the pi
 - `data/province/province_pop.csv`
 - `data/province/census_data.xlsx`
 - `data/province/2007_census_data.xlsx`
-
-Also need:
-- `data/INLA/Input/nbr_piura_tumbes_lambayeque.graph`

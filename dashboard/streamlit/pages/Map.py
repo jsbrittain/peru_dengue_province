@@ -172,6 +172,14 @@ closest_date = st.select_slider(
     value=available_dates[-1],
 )
 
+# province name fixes
+province_replacements = {
+    'Ferre': 'Ferreñafe',
+}
+for f in geojson['features']:
+    for k, v in province_replacements.items():
+        if f["properties"]["shapeName"].startswith(k):
+            f["properties"]["shapeName"] = v
 
 model_data = {f["properties"]["shapeName"]: np.nan for f in geojson["features"]}
 df_provinces = df["location"].unique()

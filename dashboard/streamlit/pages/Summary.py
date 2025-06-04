@@ -1,4 +1,5 @@
 import os
+import sqlite3
 import numpy as np
 import pandas as pd
 import streamlit as st
@@ -84,8 +85,6 @@ df_summary = pd.DataFrame(
         "R2": [],
     }
 )
-df_collate = None
-
 
 def fcn_R2(y_true, y_pred):
     ss_res = np.sum((y_true - y_pred) ** 2)
@@ -127,19 +126,6 @@ with st.spinner("Analysing datasets..."):
                 prediction = np.append(prediction, trans_prediction(df1))
                 target = np.append(target, trans_target(df1))
 
-        df1 = df[df['quantile'] == 0.5]
-        model_name = df1['model'].iloc[0]
-        df1 = df1.rename(columns={'prediction': f"prediction_{model_name}"})
-        df1 = df1.drop(columns=['quantile', 'model'])
-
-        if df_collate is None:
-            df_collate = df1
-        else:
-            df1 = df1.drop(columns=['true_value'])
-            df_collate = df_collate.merge(df1, on=['target_end_date', 'location'])
-
-        print(df_collate)
-
         df_summary = pd.concat(
             [
                 df_summary,
@@ -154,46 +140,3 @@ with st.spinner("Analysing datasets..."):
         )
 
 st.dataframe(df_summary)
-
-# AI Summary
-
-OPENAI_API_KEY=os.environ.get('OPENAI_API_KEY', None)
-
-def ask_llm(instructions, input_text, api_key=None, model="gpt-4o"):
-    if not api_key:
-        raise Exception("No API key provided for LLM query")
-
-    client = OpenAI(
-        api_key=api_key,
-    )
-
-    response = client.responses.create(
-        model=model,
-        instructions=instructions,
-        input=input_text,
-    )
-
-    print(response)
-
-    return response.output_text
-
-
-if OPENAI_API_KEY:
-    with st.spinner("Generating AI summary..."):
-        instructions = """
-        You are a public health advisor and an expert in Dengue disease and disease outbreaks.
-        Provide three paragraphs interpreting the available data as if reporting to public health or governmental organisations.
-        Focus on interpretaion of the available dataset, placing it into context within your wider expert knowledge.
-        """
-        
-        user_input = "Here is a database of Dengue predictions using different statistical models for provinces in northern Peru:"
-        df_collate.columns = df_collate.columns.str.replace('*', '', regex=False).str.strip()
-        user_input += '\n\n' + df_collate[
-                (df_collate['target_end_date'] > pd.Timestamp('2021-01-01'))
-            ].to_string()
-
-        print(user_input)
-        response = ask_llm(instructions, user_input, api_key=OPENAI_API_KEY)
-
-        st.subheader("AI Summary")
-        st.write(response)

@@ -17,6 +17,7 @@ docker run \
     -v "${SCRIPT_DIR}"/scripts:/app/scripts:ro \
     -v "${SCRIPT_DIR}"/workflows:/app/workflows:ro \
     -v "${SCRIPT_DIR}"/data:/app/data \
+    -v "${SCRIPT_DIR}"/predictions:/app/predictions \
     -it \
     "${NAME}" \
     bash
