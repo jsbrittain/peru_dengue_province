@@ -26,6 +26,8 @@ province.data.dir <- file.path(province.base.dir, "province")
 shapefiles.data.dir <- file.path(province.base.dir, "shapefiles")
 province.inla.data.in.dir <- file.path(province.base.dir, "INLA/Input")
 
+dir.create(province.inla.data.in.dir, recursive = TRUE, showWarnings = FALSE)
+
 climate_dt_province <- readRDS(file.path(province.out.dir, "climate_dt_province.RDS"))
 # ptl_province_dt <- readRDS(file.path(province.data.dir, "ptl_province_peru_dt.RDS"))
 monthly_province_cases <- readRDS(file.path(province.data.dir, "monthly_province_peru_cases.RDS"))
@@ -241,7 +243,7 @@ if ((!force_rerun) & file.exists(p02_filename)) {
     # Morropon spelling
     sort(unique(province_peru_dt$PROVINCIA))
     # province_peru_dt[which(province_peru_dt$PROVINCIA == "Morropón"), ]$PROVINCIA <- "Morropon"
-    province_peru_dt[which(province_peru_dt$PROVINCIA == "FerreÃ±afe"), ]$PROVINCIA <- "Ferrenafe"
+    province_peru_dt[which(province_peru_dt$PROVINCIA == "FerreÃ±afe"), ]$PROVINCIA <- "Ferreñafe"
     ptl_province_dt <- subset(province_peru_dt, PROVINCIA %in% ptl_region_province$PROVINCE)
     saveRDS(ptl_province_dt, file.path(province.data.dir, "ptl_province_dt.RDS"))
 

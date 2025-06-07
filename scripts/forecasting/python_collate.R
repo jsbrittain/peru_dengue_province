@@ -36,7 +36,7 @@ province_names
 # Functions ----
 process_python_deep_preds <- function(model_name) {
     ovr_preds_dt <- NULL
-    for (i in 0:13) {
+    for (i in 0:(length(province_names)-1)) {
         prov_in_q <- province_names[i + 1]
         tmp <- data.table(read.csv(file.path(peru.province.python.out.dir, paste0(model_name,
             "_dataframe_", i, ".csv"))))
@@ -87,10 +87,6 @@ quantile_historical_sarima_preds_dt <- sample_to_quantile(historical_sarima_pred
     quantiles = c(0.01, 0.025, seq(0.05, 0.95, 0.05), 0.975, 0.99))
 process_quantile_predictions(quantile_historical_sarima_preds_dt)
 
-quantile_historical_sarima_preds_dt %>%
-    score() %>%
-    summarise_scores(by = c("model", "range")) %>%
-    plot_interval_coverage()
 quantile_historical_sarima_preds_dt[which(quantile == 0.5), caret::R2(prediction,
     true_value), by = "location"]
 
@@ -381,10 +377,9 @@ ptl_province_2010_2018_data <- subset(ptl_province_inla_df, YEAR < 2018)
 ptl_province_2010_2018_data[, IND := seq(1, length(DIR)), by = "PROVINCE"]
 # Only have 42 data points in historical data.table
 ptl_province_2010_2018_data <- ptl_province_2010_2018_data[which(IND > (max(IND)) -
-    44)]  # JSB
+    43)]
 ptl_province_2010_2018_data[, IND := seq(1, length(DIR)), by = "PROVINCE"]  # New Index to match forecast data.table
-raw_historical_tcn_preds_dt[, IND := rep(seq(1, length(unique(ptl_province_2010_2018_data$TIME))  # JSB: 43 elements
-), each = 1), by = "PROVINCE"]
+raw_historical_tcn_preds_dt[, IND := rep(seq(1, length(unique(ptl_province_2010_2018_data$TIME))), each = 1), by = "PROVINCE"]
 head(raw_historical_tcn_preds_dt)
 
 raw_historical_tcn_preds_dt$X <- NULL

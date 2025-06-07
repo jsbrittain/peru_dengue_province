@@ -20,6 +20,8 @@ province.python.data.dir <- file.path(province.base.dir, "python/data")
 province.inla.data.in.dir <- file.path(province.base.dir, "INLA/Input")
 province.inla.data.out.dir <- file.path(province.base.dir, "INLA/Output")
 
+# --- Minimal required datasets --------------------------------------------------------
+
 climate_dt_province <- readRDS(file.path(province.out.dir, "climate_dt_province.RDS"))
 monthly_province_cases <- readRDS(file.path(province.data.dir, "monthly_province_peru_cases.RDS"))
 
@@ -34,8 +36,6 @@ df <- df[, .(
     PROVINCE,  
     YEAR,
     MONTH,
-    # latitude,
-    # longitude,
     # measures
     CASES,
     POP
