@@ -10,10 +10,10 @@ from darts.dataprocessing.transformers import Scaler
 from concurrent.futures import ProcessPoolExecutor, wait
 
 # Defaults
-FORCE_RERUN = os.environ.get('FORCE_RERUN', 'false').lower() == 'true'
-HORIZON_MONTHS = int(os.environ.get('HORIZON_MONTHS', '48'))
-RETRAIN_MODELS = os.environ.get('RETRAIN_MODELS', 'true').lower() == 'true'
-MAX_WORKERS = int(os.environ.get('MAX_WORKERS', os.cpu_count()))
+FORCE_RERUN = os.environ.get("FORCE_RERUN", "false").lower() == "true"
+HORIZON_MONTHS = int(os.environ.get("HORIZON_MONTHS", "48"))
+RETRAIN_MODELS = os.environ.get("RETRAIN_MODELS", "true").lower() == "true"
+MAX_WORKERS = int(os.environ.get("MAX_WORKERS", os.cpu_count()))
 
 logging.basicConfig(level=logging.INFO)
 
@@ -123,7 +123,9 @@ def window_covars_timegpt(i, timeseries_df):
         return
     logging.info(f"Processing province {i + 1} out of {province_count}")
     subset_df = timeseries_df[timeseries_df["PROVINCE"] == province_names[i]]
-    start_idx = subset_df.shape[0] - HORIZON_MONTHS  # Starting point for the 48-month horizon
+    start_idx = (
+        subset_df.shape[0] - HORIZON_MONTHS
+    )  # Starting point for the 48-month horizon
 
     timegpt_predictions = []
     for j in range(HORIZON_MONTHS):
@@ -155,9 +157,7 @@ def window_covars_timegpt(i, timeseries_df):
 
 # Historical Forecasting (without covariates)
 def historical_nocovars_timegpt(i, timeseries_df):
-    fname = (
-        f"/app/data/python/output/historical_no_covars_timegpt_dataframe_{i}.csv"
-    )
+    fname = f"/app/data/python/output/historical_no_covars_timegpt_dataframe_{i}.csv"
     if Path(fname).exists():
         logging.info(f"TimeGPT without covariates {i} already exists, skipping...")
         return
@@ -181,15 +181,15 @@ def historical_nocovars_timegpt(i, timeseries_df):
 
 # Testing Window (without covariates)
 def window_nocovars_timegpt(i, timeseries_df):
-    fname = (
-        f"/app/data/python/output/finetuned_no_covars_timegpt_dataframe_{i}.csv"
-    )
+    fname = f"/app/data/python/output/finetuned_no_covars_timegpt_dataframe_{i}.csv"
     if Path(fname).exists():
         logging.info(f"TimeGPT without covars {i} exists, skipping...")
         return
     logging.info(f"Processing province {i + 1} out of {province_count}")
     subset_df = timeseries_df[timeseries_df["PROVINCE"] == province_names[i]]
-    start_idx = subset_df.shape[0] - HORIZON_MONTHS  # Starting point for the 48-month horizon
+    start_idx = (
+        subset_df.shape[0] - HORIZON_MONTHS
+    )  # Starting point for the 48-month horizon
 
     no_covar_timegpt_predictions = []
     no_covar_cols = ["end_of_month", "LOG_CASES"]
@@ -214,6 +214,7 @@ def window_nocovars_timegpt(i, timeseries_df):
         df = no_covar_timegpt_predictions[k]
         timegpt_df = pd.concat([timegpt_df, df])
     timegpt_df.to_csv(fname)
+
 
 # Submit all jobs to the thread pool
 

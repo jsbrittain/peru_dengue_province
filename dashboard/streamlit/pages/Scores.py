@@ -5,6 +5,7 @@ import streamlit as st
 import matplotlib
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
+
 print(matplotlib.get_backend())
 
 from pathlib import Path
@@ -25,18 +26,20 @@ metric = "interval_score"
 baseline_model = "baseline"
 
 dfs = []
-for model in df['model'].unique():
-    dates = df[df.model == baseline_model]['target_end_date'].to_numpy()
+for model in df["model"].unique():
+    dates = df[df.model == baseline_model]["target_end_date"].to_numpy()
     baseline_score = df[df.model == baseline_model][metric].to_numpy()
     interval_score = df[df.model == model][metric].to_numpy()
 
-    dfs.append(pd.DataFrame(
-        {
-            "Date": dates,
-            "Model": [model] * len(interval_score),
-            "Score": interval_score / baseline_score,
-        }
-    ))
+    dfs.append(
+        pd.DataFrame(
+            {
+                "Date": dates,
+                "Model": [model] * len(interval_score),
+                "Score": interval_score / baseline_score,
+            }
+        )
+    )
 
 data = pd.concat(dfs, ignore_index=True)
 

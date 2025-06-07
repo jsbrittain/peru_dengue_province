@@ -12,10 +12,10 @@ from concurrent.futures import ProcessPoolExecutor, wait
 from darts.utils.timeseries_generation import datetime_attribute_timeseries
 
 # Defaults
-FORCE_RERUN = os.environ.get('FORCE_RERUN', 'false').lower() == 'true'
-HORIZON_MONTHS = int(os.environ.get('HORIZON_MONTHS', '48'))
-RETRAIN_MODELS = os.environ.get('RETRAIN_MODELS', 'true').lower() == 'true'
-MAX_WORKERS = int(os.environ.get('MAX_WORKERS', os.cpu_count()))
+FORCE_RERUN = os.environ.get("FORCE_RERUN", "false").lower() == "true"
+HORIZON_MONTHS = int(os.environ.get("HORIZON_MONTHS", "48"))
+RETRAIN_MODELS = os.environ.get("RETRAIN_MODELS", "true").lower() == "true"
+MAX_WORKERS = int(os.environ.get("MAX_WORKERS", os.cpu_count()))
 
 logging.basicConfig(level=logging.INFO)
 
@@ -39,6 +39,7 @@ case_cols = ["LOG_CASES"]
 timeseries_df = timeseries_df[[*base_cols, *case_cols, *covariate_cols]]
 
 # --------------------------------------------------------------------------------------
+
 
 # Historical SARIMA forecasting
 def historical_sarima(i, timeseries_df):
@@ -72,7 +73,9 @@ def historical_sarima(i, timeseries_df):
     sarima_df = pd.DataFrame(tmp)
     sarima_df.to_csv(fname)
 
+
 # Testing Window SARIMA
+
 
 def window_sarima(i, timeseries_df):
     fname = f"/app/data/python/output/arima_dataframe_{i}.csv"
@@ -109,6 +112,7 @@ def window_sarima(i, timeseries_df):
         df = arima_predictions[k]
         arima_df = pd.concat([arima_df, df])
     arima_df.to_csv(fname)
+
 
 # Submit all jobs to the thread pool
 

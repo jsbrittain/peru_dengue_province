@@ -86,6 +86,7 @@ df_summary = pd.DataFrame(
     }
 )
 
+
 def fcn_R2(y_true, y_pred):
     ss_res = np.sum((y_true - y_pred) ** 2)
     ss_tot = np.sum((y_true - np.mean(y_true)) ** 2)
