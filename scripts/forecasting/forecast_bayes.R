@@ -5,7 +5,7 @@ library(data.table)
 library(scoringutils)
 library(rgeoboundaries)
 
-# --- Setup ----------------------------------------------------------------------------
+# --- Setup --------------------------------------------------------------------
 
 # Environment variables
 SNAKEMAKE_CORES <- Sys.getenv("SNAKEMAKE_CORES", unset = "1")
@@ -22,7 +22,7 @@ dir.create(province.predictions.out.dir, recursive = TRUE, showWarnings = FALSE)
 # Analysis options
 quantiles <- c(0.01, 0.025, seq(0.05, 0.95, 0.05), 0.975, 0.99)
 
-# --- Minimal required dataset ---------------------------------------------------------
+# --- Minimal required dataset -------------------------------------------------
 
 # Read composite dataframe
 df <- data.table(
@@ -42,7 +42,7 @@ df <- df[, .(
   POP
 )]
 
-# --- Derive required metrics ----------------------------------------------------------
+# --- Derive required metrics --------------------------------------------------
 
 # Derive TIME, an index of month-year (1-140)
 df <- df %>%
@@ -97,7 +97,7 @@ setnames(df, c("X", "Y"), c("longitude", "latitude"))
 # Revert to data frame and rename for processing
 ptl_province_inla_df <- data.table(df)
 
-# --- Original code --------------------------------------------------------------------
+# --- Original code ------------------------------------------------------------
 
 latitude_monthly_dt <- copy(ptl_province_inla_df)
 setkeyv(latitude_monthly_dt, c("latitude", "longitude", "TIME"))
@@ -117,8 +117,6 @@ ptl_province_inla_df <- merge(ptl_province_inla_df, unique(subset(latitude_month
 ptl_province_inla_df[, SCALED_DIR := scale(DIR), by = "PROVINCE"]
 ptl_province_inla_df[, LOG_DIR := log(DIR + 0.01)]
 
-# province_first_time_2018 <- head(ptl_province_inla_df[which(ptl_province_inla_df$YEAR ==
-#     2018), ]$TIME, 1) - 1
 province_first_time_2018 <- min(ptl_province_inla_df[ptl_province_inla_df$YEAR == 2018, ]$TIME) - 1
 provinces <- unique(ptl_province_inla_df$PROVINCE)
 num_provinces <- length(provinces)
@@ -153,11 +151,10 @@ current_folder <- getwd()
 system2("snakemake",
   args = c(
     "--cores", SNAKEMAKE_CORES,
-    "--configfile", "workflows/forecasting/pbf/config_pbf.yaml",
-    "--snakefile", "workflows/forecasting/pbf/pbf.smk"
+    "--configfile", "workflows/forecasting/pbf/config/pbf.yaml",
+    "--snakefile", "workflows/forecasting/pbf/workflow/Snakefile"
   ),
-  stdout = "", stderr = "",
-  wait = TRUE
+  stdout = "", stderr = "", wait = TRUE
 )
 
 # End Snakemake call ---

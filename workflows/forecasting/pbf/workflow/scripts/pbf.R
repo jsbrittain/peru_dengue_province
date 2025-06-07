@@ -11,6 +11,7 @@ library(data.table)
 
 parser <- ArgumentParser()
 parser$add_argument("--index", "-i", help = "Index")
+parser$add_argument("--output", "-o", help = "Output filename")
 xargs <- parser$parse_args()
 
 province.base.dir <- file.path(getwd(), "data")
@@ -28,17 +29,19 @@ monthly_province_cases <- readRDS(file.path(province.data.dir, "monthly_province
 # --- Minimal required dataset ---------------------------------------------------------
 
 # Read composite dataframe
-df <- data.table(read.csv(file.path(province.python.data.dir,
-    "ptl_province_inla_df.csv")))
+df <- data.table(read.csv(file.path(
+  province.python.data.dir,
+  "ptl_province_inla_df.csv"
+)))
 
 df <- df[, .(
-    # identifiers
-    PROVINCE,  
-    YEAR,
-    MONTH,
-    # measures
-    CASES,
-    POP
+  # identifiers
+  PROVINCE,
+  YEAR,
+  MONTH,
+  # measures
+  CASES,
+  POP
 )]
 
 # --- Derive required metrics ----------------------------------------------------------
@@ -59,8 +62,8 @@ summer_months <- c(12, seq(1, 4))
 df <- df %>%
   mutate(
     PROV_IND = as.integer(factor(PROVINCE)),
-    POP_OFFSET = POP/1e5,
-    DIR := CASES/POP*1e5,
+    POP_OFFSET = POP / 1e5,
+    DIR := CASES / POP * 1e5,
     SEASON := if_else(MONTH %in% summer_months, 1, 0)
   )
 
@@ -77,12 +80,13 @@ tmp[, `:=`(
   )
 ), by = PROVINCE]
 # Compute 1-month lag of the difference
-tmp[, MODIFIED_DIFF_WITH_HISTORICAL_DIR_LAG := shift(DIFF_WITH_HISTORICAL_DIR, 1), 
-    by = PROVINCE]
+tmp[, MODIFIED_DIFF_WITH_HISTORICAL_DIR_LAG := shift(DIFF_WITH_HISTORICAL_DIR, 1),
+  by = PROVINCE
+]
 # Merge the lagged difference back to the original data
 df <- merge(
-  df, 
-  tmp[, .(PROVINCE, TIME, MODIFIED_DIFF_WITH_HISTORICAL_DIR_LAG)], 
+  df,
+  tmp[, .(PROVINCE, TIME, DIFF_WITH_HISTORICAL_DIR, MODIFIED_DIFF_WITH_HISTORICAL_DIR_LAG)],
   by = c("PROVINCE", "TIME")
 )
 
@@ -117,7 +121,7 @@ df <- merge(
 )
 
 # Revert to data frame and rename for processing
-ptl_province_inla_df = data.table(df)
+ptl_province_inla_df <- data.table(df)
 
 # --- Original code --------------------------------------------------------------------
 
@@ -125,8 +129,8 @@ admin1_region_names <- c("Piura", "Tumbes", "Lambayeque")
 tmp <- subset(monthly_province_cases, REGION %in% admin1_region_names)
 provinces_with_cases <- unique(tmp$PROVINCE)
 ptl_climate_dt_province <- subset(
-    climate_dt_province,
-    REGION %in% admin1_region_names & PROVINCE %in% provinces_with_cases
+  climate_dt_province,
+  REGION %in% admin1_region_names & PROVINCE %in% provinces_with_cases
 )
 length(unique(ptl_climate_dt_province$PROVINCE))
 setkeyv(ptl_climate_dt_province, c("YEAR", "MONTH", "PROVINCE"))
@@ -165,10 +169,11 @@ num_provinces <- length(provinces)
 maximum_climate_lag <- 4 # Upper bound on lags used
 
 i <- as.numeric(xargs$index)
-filename_i <- file.path(province.inla.data.out.dir, paste0("zi_pois_season_sq_rsi_dir_lag_tmin_roll_2_prec_roll_2_spi_icen_2018_2021_rt_forecast_dir.pred", i, ".RDS"))
+filename_i <- xargs$output
 
 log_info("Processing file: ", filename_i)
-idx.pred <- seq(i * num_provinces + 1, i * num_provinces + num_provinces) # This is the key to setting which month we are forecasting
+# This is the key to setting which month we are forecasting
+idx.pred <- seq(i * num_provinces + 1, i * num_provinces + num_provinces)
 s <- 5000
 rt_forecast_dt <- data.table(ptl_province_inla_df)
 setkeyv(rt_forecast_dt, c("TIME", "PROVINCE"))
@@ -332,9 +337,9 @@ forecast_formula <- CASES ~ 1 + f(MONTH,
   tmin_roll_2_basis + prec_roll_2_basis + icen_basis + spi_basis
 
 log_info("Run province model func")
-tmp_climate_cv_fit <- run_province_model_func(  # most of the runtime is here
-    data = rt_forecast_dt,
-    formula = forecast_formula
+tmp_climate_cv_fit <- run_province_model_func( # most of the runtime is here
+  data = rt_forecast_dt,
+  formula = forecast_formula
 )
 xx <- inla.posterior.sample(s, tmp_climate_cv_fit)
 xx.s <- inla.posterior.sample.eval(function(...) c(theta[1], Predictor[idx.pred]), xx)
