@@ -1,9 +1,8 @@
 """
 
-Workflow currently uses .done markers for a once-through pipeline. Replace with
-more specific file mappings per rule.
+Dengue prediction pipeline
 
-Workflow must be executed from the repo root folder (i.e. this folders parent)
+Snakefile should be called from repo root
 
 """
 
@@ -15,6 +14,10 @@ from dotenv import load_dotenv
 WORKDIR = Path.cwd()
 SNAKEMAKE_CORES = os.environ.get("SNAKEMAKE_CORES", "1")
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
+TIMEGPT_KEY = os.environ.get("TIMEGPT_KEY", "")
+RETRAIN_MODELS = os.environ.get("RETRAIN_MODELS", "false")  # speed up testing
+DASHBOARD_PORT = os.environ.get("DASHBOARD_PORT", 8501)
+MAX_WORKERS = os.environ.get("MAX_WORKERS", os.cpu_count())
 
 load_dotenv()
 
@@ -28,10 +31,12 @@ triggers = [
     "data/worldclim/.done",
     # Processing
     "data/processed/province/.done",
-    "data/processed/province_export_csv/.done",
     # Models
     "data/models/baseline/.done",
     "data/models/bayes/.done",
+    "data/models/sarima/.done",
+    "data/models/tcn/.done",
+    "data/models/timegpt/.done",
     "data/models/python/.done",
     # Ensemble
     "data/models/log_cases/.done",
@@ -105,7 +110,7 @@ rule dataset_worldclim:
     output: touch("data/worldclim/.done")
     shell:
         """
-        mkdir -p {WORKDIR}/data/worldclim
+        mkdir -p {WORKDIR}/data/climate
         docker build -t dataset-worldclim workflows/datasets/worldclim
         docker run --rm -v {WORKDIR}/data/climate:/app/data/climate dataset-worldclim
         """
@@ -135,14 +140,7 @@ rule proc_province:
             -v {WORKDIR}/data:/app/data \
             peru-build \
             R -e 'source("scripts/processing/province_02.R")'
-        """
 
-rule proc_province_export_csv:
-    input: "data/processed/province/.done"
-    output: touch("data/processed/province_export_csv/.done")
-    shell:
-        """
-        docker build --platform linux/amd64 -t peru-build .
         docker run --rm --platform linux/amd64 \
             -v {WORKDIR}/scripts:/app/scripts:ro \
             -v {WORKDIR}/workflows:/app/workflows:ro \
@@ -156,77 +154,125 @@ rule proc_province_export_csv:
 # =========================
 
 rule model_baseline:
-    input: "data/processed/province_export_csv/.done"
+    input: "data/processed/province/.done"
     output: touch("data/models/baseline/.done")
     shell:
         """
-        mkdir -p {WORKDIR}/predictions_single/baseline
+        mkdir -p {WORKDIR}/predictions/baseline
         docker build --platform linux/amd64 -t peru-build .
         docker run --rm --platform linux/amd64 \
             -v {WORKDIR}/scripts:/app/scripts:ro \
             -v {WORKDIR}/workflows:/app/workflows:ro \
             -v {WORKDIR}/data:/app/data \
-            -v {WORKDIR}/predictions_single/baseline:/app/predictions \
+            -v {WORKDIR}/predictions/baseline:/app/predictions \
             peru-build \
-            R -e 'source("scripts/forecasting/province_baseline_forecaster.R")'
+            R -e 'source("scripts/forecasting/forecast_baseline.R")'
         """
 
 rule model_bayes_climate:
-    input: "data/processed/province_export_csv/.done"
+    input: "data/processed/province/.done"
     output: touch("data/models/bayes/.done")
     shell:
         """
-        mkdir -p {WORKDIR}/predictions_single/bayesian
+        mkdir -p {WORKDIR}/predictions/bayesian
         docker build --platform linux/amd64 -t peru-build .
 
-        # # Historical predictions
-        # docker run --rm --platform linux/amd64 \
-        #     -v {WORKDIR}/scripts:/app/scripts:ro \
-        #     -v {WORKDIR}/workflows:/app/workflows:ro \
-        #     -v {WORKDIR}/data:/app/data \
-        #     -v {WORKDIR}/predictions_single/bayesian:/app/predictions \
-        #     -e SNAKEMAKE_CORES="{SNAKEMAKE_CORES}" \
-        #     peru-build \
-        #     R -e 'source("scripts/forecasting/province_historical_bayesian_forecasting.R")'
+        # Historical predictions
+        docker run --rm --platform linux/amd64 \
+            -v {WORKDIR}/scripts:/app/scripts:ro \
+            -v {WORKDIR}/workflows:/app/workflows:ro \
+            -v {WORKDIR}/data:/app/data \
+            -v {WORKDIR}/predictions/bayesian:/app/predictions \
+            -e SNAKEMAKE_CORES="{SNAKEMAKE_CORES}" \
+            peru-build \
+            R -e 'source("scripts/forecasting/historical_bayes.R")'
 
         # Forecasting
         docker run --rm --platform linux/amd64 \
             -v {WORKDIR}/scripts:/app/scripts:ro \
             -v {WORKDIR}/workflows:/app/workflows:ro \
             -v {WORKDIR}/data:/app/data \
-            -v {WORKDIR}/predictions_single/bayesian:/app/predictions \
+            -v {WORKDIR}/predictions/bayesian:/app/predictions \
             -e SNAKEMAKE_CORES="{SNAKEMAKE_CORES}" \
             peru-build \
-            R -e 'source("scripts/forecasting/province_bayesian_forecasting.R")'
+            R -e 'source("scripts/forecasting/forecast_bayes.R")'
         """
 
-# need to separate models into different folders
-rule model_python:
-    input: "data/processed/province_export_csv/.done"
-    output: touch("data/models/python/.done")
-    params:
-        api_key=os.environ.get('TIMEGPT_KEY')
+rule model_sarima:
+    input: "data/processed/province/.done"
+    output: touch("data/models/sarima/.done")
+    params: max_workers=MAX_WORKERS
     shell:
         """
         docker build --platform linux/amd64 -t peru-build .
 
-        # Python models
+        # SARIMA models
         docker run --rm --platform linux/amd64 \
             -v {WORKDIR}/scripts:/app/scripts:ro \
             -v {WORKDIR}/workflows:/app/workflows:ro \
             -v {WORKDIR}/data:/app/data \
-            -e TIMEGPT_KEY={params.api_key} \
+            -e MAX_WORKERS="{params.max_workers}" \
             peru-build \
-            python scripts/forecasting/python_peru_forecast.py
+            python scripts/forecasting/forecast_sarima.py
+        """
+
+rule model_tcn:
+    input: "data/processed/province/.done"
+    output: touch("data/models/tcn/.done")
+    params: max_workers=MAX_WORKERS
+    shell:
+        """
+        docker build --platform linux/amd64 -t peru-build .
+
+        # TCN models
+        docker run --rm --platform linux/amd64 \
+            -v {WORKDIR}/scripts:/app/scripts:ro \
+            -v {WORKDIR}/workflows:/app/workflows:ro \
+            -v {WORKDIR}/data:/app/data \
+            -e MAX_WORKERS="{params.max_workers}" \
+            peru-build \
+            python scripts/forecasting/forecast_tcn.py
+        """
+
+rule model_timegpt:
+    input: "data/processed/province/.done"
+    output: touch("data/models/timegpt/.done")
+    params:
+        api_key=TIMEGPT_KEY,
+        retrain_models=RETRAIN_MODELS,
+    shell:
+        """
+        docker build --platform linux/amd64 -t peru-build .
+
+        # TimeGPT models
+        docker run --rm --platform linux/amd64 \
+            -v {WORKDIR}/scripts:/app/scripts:ro \
+            -v {WORKDIR}/workflows:/app/workflows:ro \
+            -v {WORKDIR}/data:/app/data \
+            -e TIMEGPT_KEY="{params.api_key}" \
+            -e RETRAIN_MODELS="{params.retrain_models}" \
+            peru-build \
+            python scripts/forecasting/forecast_timegpt.py
+        """
+
+rule model_python:
+    input:
+        "data/models/sarima/.done",
+        "data/models/tcn/.done",
+        "data/models/timegpt/.done",
+    output: touch("data/models/python/.done")
+    shell:
+        """
+        docker build --platform linux/amd64 -t peru-build .
 
         # Conversion back to R
         docker run --rm --platform linux/amd64 \
             -v {WORKDIR}/scripts:/app/scripts:ro \
             -v {WORKDIR}/workflows:/app/workflows:ro \
             -v {WORKDIR}/data:/app/data \
-            -v {WORKDIR}/predictions_single:/app/predictions \
+            -v {WORKDIR}/predictions:/app/predictions \
             peru-build \
-            R -e 'source("scripts/forecasting/province_python_forecasting.R")'
+            R -e 'source("scripts/forecasting/python_collate.R")'
         """
 
 # =========================
@@ -250,7 +296,7 @@ rule ensemble_log_cases:
             -v {WORKDIR}/predictions:/app/predictions \
             -v {WORKDIR}/analysis:/app/analysis \
             peru-build \
-            R -e 'source("scripts/ensemble/province_log_cases.R")'
+            R -e 'source("scripts/ensemble/log_cases.R")'
         """
 
 # ======================================================================================
@@ -263,6 +309,8 @@ rule ensemble_log_cases:
 # Note that running the dashboard in this way is NOT a good idea as it holds snakemake
 # open until the streamlit app dies. But, it does provide a quick way to test it.
 rule dashboard:
+    params:
+        port=DASHBOARD_PORT
     shell:
         """
         docker build -t streamlit {WORKDIR}/dashboard/streamlit
@@ -271,13 +319,14 @@ rule dashboard:
             -v {WORKDIR}/data:/app/data \
             -v {WORKDIR}/predictions:/app/predictions \
             -v {WORKDIR}/analysis:/app/analysis \
-            -e OPENAI_API_KEY={OPENAI_API_KEY} \
-            -p 8501:8501 \
+            -p {params.port}:8501 \
             streamlit
         """
 
 # Start streamlit container in background
 rule start_dashboard:
+    params:
+        port=DASHBOARD_PORT
     shell:
         """
         mkdir -p logs/dashboard
@@ -287,6 +336,6 @@ rule start_dashboard:
             -v {WORKDIR}/data:/app/data \
             -v {WORKDIR}/predictions:/app/predictions \
             -v {WORKDIR}/analysis:/app/analysis \
-            -p 8501:8501 \
+            -p {params.port}:8501 \
             streamlit 2>&1 > logs/dashboard/streamlit.log > &
         """

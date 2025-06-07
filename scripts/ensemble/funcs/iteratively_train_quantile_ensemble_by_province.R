@@ -9,10 +9,7 @@ iteratively_train_quantile_ensemble_by_province <- function(quantiles,
   # input_quantile_dt is predictions for entire testing window (2018-2021)
   # historical_input_quantile_dt is historical predictions
 
-  # prediction_indices <- sort(unique(input_quantile_dt$IND))
-
   model_names <- sort(unique(input_quantile_dt$model))
-  # print(model_names)
   ensemble_model_name <- paste(model_names, collapse = "_")
   testing_dates <- sort(unique(input_quantile_dt$target_end_date))
   num_ensemble_components <- length(unique(input_quantile_dt$model))
@@ -61,17 +58,9 @@ iteratively_train_quantile_ensemble_by_province <- function(quantiles,
         num_ensemble_components,
         num_quantile_levels
       ))
-      # print(dim(qarr))
-      # print(dim(qarr))
       prediction_indices <- sort(unique(historical_input_quantile_dt$IND))
       for (i in 1:num_pred_points) {
-        # print(paste0("i: ", i))
         for (j in 1:num_ensemble_components) {
-          # print(paste0("j: ", j))
-          # print(prediction_indices[i])
-          # print(unique(model_names[j]))
-          # print(historical_input_quantile_dt[which(IND == prediction_indices[i] &
-          #                                            model== unique(model_names[j])), ])
           qarr[i, j, ] <-
             historical_input_quantile_dt[which(IND == prediction_indices[i] &
               model == unique(model_names[j])), ]$prediction
@@ -82,7 +71,6 @@ iteratively_train_quantile_ensemble_by_province <- function(quantiles,
         tmp_true_data[[data_field]],
         quantiles
       )
-      # print(quantile_ensemble_weights$alpha)
       tmp_trained_quantile_ensemble <- copy(testing_input_quantile_dt)
       model_weights_dt <- data.table(model = sort(unique(model_names)), weights = quantile_ensemble_weights$alpha)
       tmp_trained_quantile_ensemble <-
@@ -96,12 +84,6 @@ iteratively_train_quantile_ensemble_by_province <- function(quantiles,
         ovr_model_weights_dt,
         model_weights_dt
       )
-      # tmp_trained_quantile_ensemble <- tmp_trained_quantile_ensemble[, list(prediction = sum(weights*prediction)),
-      #                                                                                by = c("location", "true_value",
-      #                                                                                       "target_end_date", "quantile")]
-      #
-      # tmp_trained_quantile_ensemble[, model:= paste("trained_quantile", ensemble_model_name)]
-      # ovr_preds_dt <- tmp_trained_quantile_ensemble
     }
   }
   return(ovr_model_weights_dt)
