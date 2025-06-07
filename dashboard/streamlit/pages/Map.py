@@ -174,9 +174,9 @@ closest_date = st.select_slider(
 
 # province name fixes
 province_replacements = {
-    'Ferre': 'Ferreñafe',
+    "Ferre": "Ferreñafe",
 }
-for f in geojson['features']:
+for f in geojson["features"]:
     for k, v in province_replacements.items():
         if f["properties"]["shapeName"].startswith(k):
             f["properties"]["shapeName"] = v

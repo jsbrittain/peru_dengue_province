@@ -12,10 +12,10 @@ from darts.utils.likelihood_models import QuantileRegression
 from darts.dataprocessing.transformers import Scaler
 
 # Defaults
-FORCE_RERUN = os.environ.get('FORCE_RERUN', 'false').lower() == 'true'
-HORIZON_MONTHS = int(os.environ.get('HORIZON_MONTHS', '48'))
-RETRAIN_MODELS = os.environ.get('RETRAIN_MODELS', 'true').lower() == 'true'
-MAX_WORKERS = int(os.environ.get('MAX_WORKERS', os.cpu_count()))
+FORCE_RERUN = os.environ.get("FORCE_RERUN", "false").lower() == "true"
+HORIZON_MONTHS = int(os.environ.get("HORIZON_MONTHS", "48"))
+RETRAIN_MODELS = os.environ.get("RETRAIN_MODELS", "true").lower() == "true"
+MAX_WORKERS = int(os.environ.get("MAX_WORKERS", os.cpu_count()))
 
 # Best not to use threadpools with this function as darts is highly threaded.
 USE_THREADPOOL = False
@@ -67,6 +67,7 @@ tcn_model = TCNModel(
     optimizer_kwargs={"lr": 1e-2},
 )
 
+
 # TCN historical forecasting
 def historical_tcn(i, timeseries_df):
     fname = f"/app/data/python/output/historical_tcn_dataframe_{i}.csv"
@@ -113,6 +114,7 @@ def historical_tcn(i, timeseries_df):
 
 # Testing Window TCN
 
+
 def window_tcn(i, timeseries_df):
     fname = f"/app/data/python/output/tcn_dataframe_{i}.csv"
     if not FORCE_RERUN and Path(fname).exists():
@@ -132,7 +134,9 @@ def window_tcn(i, timeseries_df):
     ]
 
     tcn_predictions = []
-    start_idx = subset_df.shape[0] - HORIZON_MONTHS  # Starting point for the 48-month horizon
+    start_idx = (
+        subset_df.shape[0] - HORIZON_MONTHS
+    )  # Starting point for the 48-month horizon
     for j in range(HORIZON_MONTHS):
         logging.info(f"Processing month {j + 1} out of {HORIZON_MONTHS}")
         tmp = TimeSeries.all_values(target_series[0][: start_idx + j + 1])
@@ -177,6 +181,7 @@ def window_tcn(i, timeseries_df):
         df = tcn_predictions[k]
         tcn_df = pd.concat([tcn_df, df])
     tcn_df.to_csv(fname)
+
 
 # Submit all jobs to the thread pool
 
