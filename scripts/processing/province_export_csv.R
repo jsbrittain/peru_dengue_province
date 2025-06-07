@@ -8,7 +8,7 @@ peru.province.out.dir <- file.path(peru.province.base.dir, "output")
 peru.province.python.data.dir <- file.path(peru.province.base.dir, "python/data")
 
 # Ensure output folder exists
-dir.create(peru.province.python.data.dir, recursive=TRUE, showWarnings=FALSE)
+dir.create(peru.province.python.data.dir, recursive = TRUE, showWarnings = FALSE)
 
 # Write data.table to csv for Python forecasting as follows: Set up data.table
 # with log(CASES + 1) DeepTCN, TimeGPT, and SARIMA models all fit using
@@ -25,8 +25,10 @@ ptl_province_inla_df[, LAG_1_LOG_CASES := Lag(LOG_CASES, k = 1), by = "PROVINCE"
 ptl_province_inla_df[, LAG_2_LOG_CASES := Lag(LOG_CASES, k = 2), by = "PROVINCE"]
 ptl_province_inla_df[, LAG_1_tmin_roll_2 := Lag(tmin_roll_2, k = 1), by = "PROVINCE"]
 ptl_province_inla_df[, LAG_1_prec_roll_2 := Lag(prec_roll_2, k = 1), by = "PROVINCE"]
-ptl_province_inla_df[, end_of_month := as.Date(ceiling_date(ymd(paste(YEAR, MONTH,
-    1)), "month") - days(1))]
+ptl_province_inla_df[, end_of_month := as.Date(ceiling_date(ymd(paste(
+  YEAR, MONTH,
+  1
+)), "month") - days(1))]
 
 
 # For timegpt, set up unique_id column - factor variable for PROVINCE

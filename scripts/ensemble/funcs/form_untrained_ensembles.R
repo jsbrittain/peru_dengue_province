@@ -1,4 +1,3 @@
-
 form_untrained_ensembles <- function(models_dt) {
   new_ensembles_dt <- NULL
   # EW

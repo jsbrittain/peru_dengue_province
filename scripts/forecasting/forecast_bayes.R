@@ -16,30 +16,30 @@ province.python.data.dir <- file.path(province.base.dir, "python/data")
 province.predictions.out.dir <- file.path(getwd(), "predictions")
 
 # Ensure output folders exist
-dir.create(province.inla.data.out.dir, recursive=TRUE, showWarnings=FALSE)
-dir.create(province.predictions.out.dir, recursive=TRUE, showWarnings=FALSE)
+dir.create(province.inla.data.out.dir, recursive = TRUE, showWarnings = FALSE)
+dir.create(province.predictions.out.dir, recursive = TRUE, showWarnings = FALSE)
 
 # Analysis options
-quantiles = c(0.01, 0.025, seq(0.05, 0.95, 0.05), 0.975, 0.99)
+quantiles <- c(0.01, 0.025, seq(0.05, 0.95, 0.05), 0.975, 0.99)
 
 # --- Minimal required dataset ---------------------------------------------------------
 
 # Read composite dataframe
 df <- data.table(
-    read.csv(file.path(province.python.data.dir, "ptl_province_inla_df.csv"))
+  read.csv(file.path(province.python.data.dir, "ptl_province_inla_df.csv"))
 )
 
 # This is the subset of columns (out of the original 58) that are actually required for
 # this analysis.
 
 df <- df[, .(
-    # identifiers
-    PROVINCE,  
-    YEAR,
-    MONTH,
-    # measures
-    CASES,
-    POP
+  # identifiers
+  PROVINCE,
+  YEAR,
+  MONTH,
+  # measures
+  CASES,
+  POP
 )]
 
 # --- Derive required metrics ----------------------------------------------------------
@@ -58,8 +58,8 @@ df <- df %>%
 # Add additional required columns
 df <- df %>%
   mutate(
-    POP_OFFSET = POP/1e5,
-    DIR := CASES/POP*1e5,
+    POP_OFFSET = POP / 1e5,
+    DIR := CASES / POP * 1e5,
     LOG_CASES = log1p(CASES)
   )
 
@@ -69,8 +69,10 @@ centroids <- suppressWarnings(st_centroid(peru_adm2))
 # Extract coordinates and keep only required columns
 coordinates_df <- as.data.table(
   centroids %>%
-    mutate(X = st_coordinates(geometry)[, 1],
-           Y = st_coordinates(geometry)[, 2]) %>%
+    mutate(
+      X = st_coordinates(geometry)[, 1],
+      Y = st_coordinates(geometry)[, 2]
+    ) %>%
     st_drop_geometry() %>%
     select(shapeName, X, Y)
 )
@@ -93,7 +95,7 @@ df <- merge(
 setnames(df, c("X", "Y"), c("longitude", "latitude"))
 
 # Revert to data frame and rename for processing
-ptl_province_inla_df = data.table(df)
+ptl_province_inla_df <- data.table(df)
 
 # --- Original code --------------------------------------------------------------------
 
@@ -105,17 +107,19 @@ tmp[, LONG_PROV_IND := seq(1, nrow(tmp), by = 1)]
 latitude_monthly_dt <- merge(latitude_monthly_dt, tmp, by = "PROVINCE")
 setkeyv(latitude_monthly_dt, c("latitude", "longitude", "TIME"))
 latitude_monthly_dt[, SCALED_DIR := scale(DIR), by = "PROVINCE"]
-ptl_province_inla_df[, YEAR_DECIMAL := YEAR + (MONTH - 1)/12]
+ptl_province_inla_df[, YEAR_DECIMAL := YEAR + (MONTH - 1) / 12]
 ptl_province_inla_df <- merge(ptl_province_inla_df, unique(subset(latitude_monthly_dt,
-    select = c("LAT_PROV_IND", "PROVINCE"))), by = c("PROVINCE"))
+  select = c("LAT_PROV_IND", "PROVINCE")
+)), by = c("PROVINCE"))
 ptl_province_inla_df <- merge(ptl_province_inla_df, unique(subset(latitude_monthly_dt,
-    select = c("LONG_PROV_IND", "PROVINCE"))), by = c("PROVINCE"))
+  select = c("LONG_PROV_IND", "PROVINCE")
+)), by = c("PROVINCE"))
 ptl_province_inla_df[, SCALED_DIR := scale(DIR), by = "PROVINCE"]
 ptl_province_inla_df[, LOG_DIR := log(DIR + 0.01)]
 
 # province_first_time_2018 <- head(ptl_province_inla_df[which(ptl_province_inla_df$YEAR ==
 #     2018), ]$TIME, 1) - 1
-province_first_time_2018 <- min(ptl_province_inla_df[ptl_province_inla_df$YEAR==2018,]$TIME) - 1
+province_first_time_2018 <- min(ptl_province_inla_df[ptl_province_inla_df$YEAR == 2018, ]$TIME) - 1
 provinces <- unique(ptl_province_inla_df$PROVINCE)
 num_provinces <- length(provinces)
 
@@ -174,7 +178,7 @@ for (i in (province_first_time_2018):(nrow(ptl_province_inla_df) / num_provinces
   all_dir.pred <- rbind(all_dir.pred, tmp_dir.pred)
 }
 
-saveRDS(all_dir.pred, file = file.path(
+saveRDS(all_dir.pred, file = file.path( # JSB: File is never referenced.
   province.inla.data.out.dir,
   paste0("all_dir.pred.RDS")
 ))
@@ -225,8 +229,9 @@ saveRDS(climate_log_cases.dt_2018_2021,
   file = file.path(province.inla.data.out.dir, "climate_log_cases.dt_2018_2021.RDS")
 )
 write.csv(climate_log_cases.dt_2018_2021,
-    paste0(province.predictions.out.dir, "/pred_log_cases_samples_forecasting.csv"),
-    row.names=FALSE)
+  paste0(province.predictions.out.dir, "/pred_log_cases_samples_forecasting.csv"),
+  row.names = FALSE
+)
 
 climate_2018_2021_log_cases_quantile_dt <-
   sample_to_quantile(climate_log_cases.dt_2018_2021,
@@ -236,7 +241,8 @@ saveRDS(climate_2018_2021_log_cases_quantile_dt,
   file = file.path(province.inla.data.out.dir, "climate_2018_2021_log_cases_quantile_dt.RDS")
 )
 write.csv(climate_2018_2021_log_cases_quantile_dt,
-    paste0(province.predictions.out.dir, "/pred_log_cases_quantiles_forecasting.csv"),
-    row.names=FALSE)
+  paste0(province.predictions.out.dir, "/pred_log_cases_quantiles_forecasting.csv"),
+  row.names = FALSE
+)
 
 log_info("Done with province_bayesian_forecasting.R")

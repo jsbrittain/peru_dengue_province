@@ -10,17 +10,17 @@ library(doParallel)
 library(data.table)
 library(scoringutils)
 
-metric_id = 1
+metric_id <- 1
 if (metric_id == 1) {
-    metric_name = "log_cases"
-    metric_field = "LOG_CASES"
+  metric_name <- "log_cases"
+  metric_field <- "LOG_CASES"
 } else {
-    metric_name = "dir"
-    metric_field = "DIR"
+  metric_name <- "dir"
+  metric_field <- "DIR"
 }
 
-source('scripts/ensemble/funcs/form_untrained_ensembles.R')
-source('scripts/ensemble/funcs/iteratively_train_quantile_ensemble_by_province.R')
+source("scripts/ensemble/funcs/form_untrained_ensembles.R")
+source("scripts/ensemble/funcs/iteratively_train_quantile_ensemble_by_province.R")
 
 peru.province.base.dir <- file.path(getwd(), "data")
 peru.province.out.dir <- file.path(peru.province.base.dir, "output")
@@ -38,17 +38,17 @@ quantiles <- c(
 )
 
 find_quantile_violations <- function(df) {
-    violations <- df %>%
-      arrange(location, target_end_date, quantile, model) %>%
-      group_by(location, target_end_date, model) %>%
-      mutate(
-        prev_prediction = lag(prediction),
-        prev_quantile = lag(quantile),
-        decreasing = prediction < cummax(prediction)
-      ) %>%
-      filter(decreasing)
+  violations <- df %>%
+    arrange(location, target_end_date, quantile, model) %>%
+    group_by(location, target_end_date, model) %>%
+    mutate(
+      prev_prediction = lag(prediction),
+      prev_quantile = lag(quantile),
+      decreasing = prediction < cummax(prediction)
+    ) %>%
+    filter(decreasing)
 
-    print(violations, width=Inf)
+  print(violations, width = Inf)
 }
 
 fix_quantile_violations <- function(df, tolerance = 1e-8) {
@@ -85,8 +85,8 @@ ptl_province_2018_2021_data <- subset(
 )
 ptl_province_2018_2021_data[, IND := seq(1, length(DIR)), by = "PROVINCE"]
 ptl_province_2010_2018_data <- subset(
-    ptl_province_inla_df,
-    YEAR < 2018
+  ptl_province_inla_df,
+  YEAR < 2018
 )
 ptl_province_2010_2018_data[, IND := seq(1, length(DIR)), by = "PROVINCE"]
 scoring_columns <- c(
@@ -159,7 +159,7 @@ quantile_baseline_log_cases.pred_dt_2018_2021 <- data.table(read.csv(file = file
   paste0("baseline/pred_", metric_name, "_quantiles_forecasting.csv")
 )))
 quantile_baseline_log_cases.pred_dt_2018_2021[which(quantile == 0.5), caret::MAE(prediction, true_value)]
-quantile_baseline_log_cases.pred_dt_2018_2021[, target_end_date := as.character(target_end_date)]  # JSB
+quantile_baseline_log_cases.pred_dt_2018_2021[, target_end_date := as.character(target_end_date)] # JSB
 
 
 # Combine all into single data.table
@@ -176,7 +176,7 @@ quantile_log_cases_components_dt[, true_value := round(true_value, 8)]
 quantile_log_cases_components_dt[, length(unique(true_value)), by = "model"]
 quantile_log_cases_components_dt[, target_end_date := as.Date(target_end_date)]
 quantile_log_cases_components_dt[which(prediction < 0), prediction := 0]
-quantile_log_cases_components_dt %>% fix_quantile_violations
+quantile_log_cases_components_dt %>% fix_quantile_violations()
 quantile_log_cases_components_dt %>%
   score() %>%
   summarise_scores(by = c("model"))
@@ -217,8 +217,10 @@ iteratively_train_quantile_ensemble <- function(quantiles,
 
   # JSB: This can be re-written and parallelised (snakemake)
   for (t in 1:number_testing_dates) {
-    log_info(paste0("iteratively_train_quantile_ensemble (", testing_dates[t],
-        ", t = ", t, " of ", number_testing_dates, ")"))
+    log_info(paste0(
+      "iteratively_train_quantile_ensemble (", testing_dates[t],
+      ", t = ", t, " of ", number_testing_dates, ")"
+    ))
     new_date <- testing_dates[t]
     # number of historical pred points -- JSB: Iteratively adds rows to analysis df
     tmp_true_data <- subset(true_data, end_of_month <= new_date)
@@ -269,12 +271,12 @@ iteratively_train_quantile_ensemble <- function(quantiles,
 }
 
 iteratively_train_quantile_ensemble_parallel <- function(quantiles,
-                                                number_testing_dates,
-                                                input_quantile_dt,
-                                                pred_points_dt,
-                                                historical_input_quantile_dt,
-                                                true_data,
-                                                metric_field) {
+                                                         number_testing_dates,
+                                                         input_quantile_dt,
+                                                         pred_points_dt,
+                                                         historical_input_quantile_dt,
+                                                         true_data,
+                                                         metric_field) {
   model_names <- sort(unique(input_quantile_dt$model))
   ensemble_model_name <- paste(model_names, collapse = "_")
   testing_dates <- sort(unique(pred_points_dt$target_end_date))
@@ -288,8 +290,10 @@ iteratively_train_quantile_ensemble_parallel <- function(quantiles,
 
   # Parallel loop
   results <- foreach(t = 1:number_testing_dates, .combine = rbind, .packages = c("data.table", "logger"), .export = c("quantile_ensemble")) %dopar% {
-    log_info(paste0("iteratively_train_quantile_ensemble (", testing_dates[t],
-                    ", t = ", t, " of ", number_testing_dates, ")"))
+    log_info(paste0(
+      "iteratively_train_quantile_ensemble (", testing_dates[t],
+      ", t = ", t, " of ", number_testing_dates, ")"
+    ))
 
     new_date <- testing_dates[t]
 
@@ -341,7 +345,7 @@ setkeyv(pred_points_dt, c("model", "location", "target_end_date"))
 pred_points_dt[, IND := seq(1, length(target_end_date)), by = "model"]
 input_quantile_dt <- merge(input_quantile_dt, pred_points_dt, by = c("model", "location", "target_end_date"))
 setkeyv(input_quantile_dt, c("location", "model", "target_end_date", "quantile"))
-number_testing_dates = length(unique(pred_points_dt$target_end_date))
+number_testing_dates <- length(unique(pred_points_dt$target_end_date))
 true_log_cases_data <- copy(ptl_province_inla_df)
 
 min_date <- min(input_quantile_dt$target_end_date)
@@ -357,7 +361,7 @@ iteratively_trained_weights_log_cases_dt <- iteratively_train_quantile_ensemble_
   metric_field = metric_field
 )
 saveRDS(iteratively_trained_weights_log_cases_dt,
-  file = file.path(peru.province.out.dir, paste0("iteratively_trained_weights_",metric_name ,"_dt.RDS"))
+  file = file.path(peru.province.out.dir, paste0("iteratively_trained_weights_", metric_name, "_dt.RDS"))
 )
 
 iteratively_trained_weights_log_cases_dt[, model_factor := factor(model)]
@@ -510,7 +514,7 @@ wis_rolling_window_over_time <- function(models_dt, times) {
 quantile_log_cases_components_plus_ensembles_dt[, target_end_date := as.Date(target_end_date)]
 
 log_info("Computing WIS (rolling window)")
-wis_combined <- wis_rolling_window_over_time(quantile_log_cases_components_plus_ensembles_dt, times=unique(quantile_log_cases_components_plus_ensembles_dt$target_end_date))
+wis_combined <- wis_rolling_window_over_time(quantile_log_cases_components_plus_ensembles_dt, times = unique(quantile_log_cases_components_plus_ensembles_dt$target_end_date))
 
 wis_summary <- wis_combined[[1]]
 wis_summary[, target_end_date := as.Date(centering_date)]
@@ -519,15 +523,19 @@ wis_province <- wis_combined[[2]]
 wis_province[, target_end_date := as.Date(centering_date)]
 
 log_info("Writing WIS over time (rolling window) - Summary...")
-dir.create(file.path(peru.province.analysis.out.dir,
-    "wis"), recursive = TRUE, showWarnings = FALSE)
+dir.create(file.path(
+  peru.province.analysis.out.dir,
+  "wis"
+), recursive = TRUE, showWarnings = FALSE)
 write.csv(wis_summary,
-    file.path(peru.province.analysis.out.dir, "wis", "wis_summary.csv"),
-    row.names=FALSE)
+  file.path(peru.province.analysis.out.dir, "wis", "wis_summary.csv"),
+  row.names = FALSE
+)
 log_info("Writing WIS over time (rolling window) - Provinces...")
 write.csv(wis_province,
-    file.path(peru.province.analysis.out.dir, "wis", "wis_province.csv"),
-    row.names=FALSE)
+  file.path(peru.province.analysis.out.dir, "wis", "wis_province.csv"),
+  row.names = FALSE
+)
 log_info("Written WIS over time (rolling window).")
 
 # Historical models ----
@@ -535,7 +543,7 @@ quantile_baseline_log_cases.pred_dt_2010_2018 <- data.table(read.csv(file = file
   peru.province.predictions.out.dir,
   paste0("baseline/pred_", metric_name, "_quantiles_historical.csv")
 )))
-quantile_baseline_log_cases.pred_dt_2010_2018[, target_end_date := as.character(target_end_date)]  # JSB
+quantile_baseline_log_cases.pred_dt_2010_2018[, target_end_date := as.character(target_end_date)] # JSB
 quantile_historical_tcn_preds_dt <- readRDS(file = file.path(
   peru.province.python.out.dir,
   "quantile_historical_tcn_preds_dt.RDS"
@@ -755,11 +763,11 @@ runner_trained_ensemble_weights_quantile_log_cases_dt <- iteratively_train_quant
 )
 
 saveRDS(
-    runner_trained_ensemble_weights_quantile_log_cases_dt,
-    file = file.path(
-        peru.province.out.dir,
-        paste0("runner_trained_ensemble_weights_quantile_", metric_name, "_dt.RDS")
-    )
+  runner_trained_ensemble_weights_quantile_log_cases_dt,
+  file = file.path(
+    peru.province.out.dir,
+    paste0("runner_trained_ensemble_weights_quantile_", metric_name, "_dt.RDS")
+  )
 )
 runner_trained_ensemble_weights_quantile_log_cases_dt <- readRDS(file = file.path(peru.province.out.dir, paste0("runner_trained_ensemble_weights_quantile_", metric_name, "_dt.RDS")))
 
@@ -929,30 +937,36 @@ setkey(historical_quantile_log_cases_components_plus_ensembles_dt, "model")
 
 # Write model predictions (quantiles) out
 for (name in historical_new_model_names) {
-    model_name <- str_trim(name)
-    model_name <- str_replace_all(model_name, "-", "_")
-    model_name <- str_replace_all(model_name, " ", "_")
-    model_name <- str_replace_all(model_name, fixed("*"), fixed("star"))
-    model_name <- paste0('Ensemble_', model_name)
-    print(model_name)
+  model_name <- str_trim(name)
+  model_name <- str_replace_all(model_name, "-", "_")
+  model_name <- str_replace_all(model_name, " ", "_")
+  model_name <- str_replace_all(model_name, fixed("*"), fixed("star"))
+  model_name <- paste0("Ensemble_", model_name)
+  print(model_name)
 
-    # Forecasting
-    tmp <- copy(quantile_log_cases_components_plus_ensembles_dt)
-    tmp <- tmp[tmp$model == name]
-    dir.create(file.path(peru.province.predictions.out.dir,
-        model_name), recursive = TRUE, showWarnings = FALSE)
-    write.csv(tmp,
-        file.path(peru.province.predictions.out.dir, model_name, paste0("pred_", metric_name, "_quantiles_forecasting.csv")),
-        row.names=FALSE)
-    
-    # Historical
-    tmp <- copy(historical_quantile_log_cases_components_plus_ensembles_dt)
-    tmp <- tmp[tmp$model == name]
-    dir.create(file.path(peru.province.predictions.out.dir,
-        model_name), recursive = TRUE, showWarnings = FALSE)
-    write.csv(tmp,
-        file.path(peru.province.predictions.out.dir, model_name, paste0("pred_", metric_name, "_quantiles_historical.csv")),
-        row.names=FALSE)
+  # Forecasting
+  tmp <- copy(quantile_log_cases_components_plus_ensembles_dt)
+  tmp <- tmp[tmp$model == name]
+  dir.create(file.path(
+    peru.province.predictions.out.dir,
+    model_name
+  ), recursive = TRUE, showWarnings = FALSE)
+  write.csv(tmp,
+    file.path(peru.province.predictions.out.dir, model_name, paste0("pred_", metric_name, "_quantiles_forecasting.csv")),
+    row.names = FALSE
+  )
+
+  # Historical
+  tmp <- copy(historical_quantile_log_cases_components_plus_ensembles_dt)
+  tmp <- tmp[tmp$model == name]
+  dir.create(file.path(
+    peru.province.predictions.out.dir,
+    model_name
+  ), recursive = TRUE, showWarnings = FALSE)
+  write.csv(tmp,
+    file.path(peru.province.predictions.out.dir, model_name, paste0("pred_", metric_name, "_quantiles_historical.csv")),
+    row.names = FALSE
+  )
 }
 
 # INSERT LATITUDE AND LONGITUDE INDICATORS ----
@@ -960,16 +974,16 @@ for (name in historical_new_model_names) {
 latitude_monthly_dt <- copy(ptl_province_inla_df)
 setkeyv(latitude_monthly_dt, c("latitude", "longitude", "TIME"))
 tmp <- unique(subset(latitude_monthly_dt, select = c("PROVINCE")))
-tmp[, LAT_PROV_IND:= seq(1, nrow(tmp), by = 1)]
-tmp[, LONG_PROV_IND:= seq(1, nrow(tmp), by = 1)]
+tmp[, LAT_PROV_IND := seq(1, nrow(tmp), by = 1)]
+tmp[, LONG_PROV_IND := seq(1, nrow(tmp), by = 1)]
 latitude_monthly_dt <- merge(latitude_monthly_dt, tmp, by = "PROVINCE")
 setkeyv(latitude_monthly_dt, c("latitude", "longitude", "TIME"))
-latitude_monthly_dt[, SCALED_DIR:= scale(DIR), by = "PROVINCE"]
+latitude_monthly_dt[, SCALED_DIR := scale(DIR), by = "PROVINCE"]
 
-ptl_province_inla_df[, YEAR_DECIMAL:= YEAR + (MONTH - 1)/12]
+ptl_province_inla_df[, YEAR_DECIMAL := YEAR + (MONTH - 1) / 12]
 
 ptl_province_inla_df <- merge(
-  ptl_province_inla_df, 
+  ptl_province_inla_df,
   unique(
     subset(
       latitude_monthly_dt,
@@ -979,7 +993,7 @@ ptl_province_inla_df <- merge(
   by = c("PROVINCE")
 )
 ptl_province_inla_df <- merge(
-  ptl_province_inla_df, 
+  ptl_province_inla_df,
   unique(
     subset(
       latitude_monthly_dt,
