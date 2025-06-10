@@ -1,68 +1,24 @@
+#' List WorldClim .tif files for a climate variable across a year range
+#'
+#' @param years_sequence A vector of years, e.g., 2020:2021
+#' @param climate_variable One of "tmax", "tmin", or "prec"
+#' @return A character vector of file paths for each month/year combination
 list_worldclim_variable_tifs <- function(years_sequence, climate_variable) {
-  climate_file_list <- 0
-  for (i in 1:length(years_sequence)) {
-    file_year <- years_sequence[i]
-    for (j in seq(1, 12)) {
-      if (j < 10) {
-        j <- paste0("0", j)
-      }
-      file_month <- j
-      if (climate_variable == "tmax") {
-        climate_file <- unname(file.path(peru.climate.data.dir, paste0(
-          "wc2.1_2.5m_",
-          climate_variable, "_", file_year, "-", file_month, ".tif"
-        )))
-      }
-      if (climate_variable == "tmin") {
-        climate_file <- unname(file.path(peru.climate.data.dir, paste0(
-          "wc2.1_2.5m_",
-          climate_variable, "_", file_year, "-", file_month, ".tif"
-        )))
-      }
-      if (climate_variable == "prec") {
-        climate_file <- unname(file.path(peru.climate.data.dir, paste0(
-          "wc2.1_2.5m_",
-          climate_variable, "_", file_year, "-", file_month, ".tif"
-        )))
-      }
-      print(climate_file)
-      climate_file_list <- c(climate_file_list, climate_file)
-    }
+  if (!climate_variable %in% c("tmax", "tmin", "prec")) {
+    stop("climate_variable must be one of 'tmax', 'tmin', or 'prec'")
   }
-  return(climate_file_list[2:length(climate_file_list)])
-}
 
-# Function to list worldclim 2020-2021 files for climatic variables
-list_worldclim_variable_tifs_20_21 <- function(years_sequence, climate_variable) {
-  climate_file_list <- 0
-  for (i in 1:length(years_sequence)) {
-    file_year <- years_sequence[i]
-    for (j in seq(1, 12)) {
-      if (j < 10) {
-        j <- paste0("0", j)
-      }
-      file_month <- j
-      if (climate_variable == "tmax") {
-        climate_file <- unname(file.path(peru.climate.data.dir, paste0(
-          "wc2.1_2.5m_",
-          climate_variable, "_", file_year, "-", file_month, ".tif"
-        )))
-      }
-      if (climate_variable == "tmin") {
-        climate_file <- unname(file.path(peru.climate.data.dir, paste0(
-          "wc2.1_2.5m_",
-          climate_variable, "_", file_year, "-", file_month, ".tif"
-        )))
-      }
-      if (climate_variable == "prec") {
-        climate_file <- unname(file.path(peru.climate.data.dir, paste0(
-          "wc2.1_2.5m_",
-          climate_variable, "_", file_year, "-", file_month, ".tif"
-        )))
-      }
+  climate_file_list <- character()
+
+  for (file_year in years_sequence) {
+    for (month in 1:12) {
+      file_month <- sprintf("%02d", month)  # zero-pad to "01", "02", ...
+      file_name <- paste0("wc2.1_2.5m_", climate_variable, "_", file_year, "-", file_month, ".tif")
+      climate_file <- unname(file.path(peru.climate.data.dir, file_name))
       print(climate_file)
       climate_file_list <- c(climate_file_list, climate_file)
     }
   }
-  return(climate_file_list[2:length(climate_file_list)])
+
+  climate_file_list  # return
 }

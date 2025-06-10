@@ -10,9 +10,12 @@ library(quantmod)
 library(data.table)
 
 parser <- ArgumentParser()
-parser$add_argument("--index", "-i", help = "Index")
+parser$add_argument("--date", "-d", help = "Date")
 parser$add_argument("--output", "-o", help = "Output filename")
 xargs <- parser$parse_args()
+
+target_date <- xargs$date
+filename_i <- xargs$output
 
 province.base.dir <- file.path(getwd(), "data")
 province.out.dir <- file.path(province.base.dir, "output")
@@ -21,12 +24,14 @@ province.python.data.dir <- file.path(province.base.dir, "python/data")
 province.inla.data.in.dir <- file.path(province.base.dir, "INLA/Input")
 province.inla.data.out.dir <- file.path(province.base.dir, "INLA/Output")
 
-# --- Minimal required datasets --------------------------------------------------------
+samples <- 5000
 
-climate_dt_province <- readRDS(file.path(province.out.dir, "climate_dt_province.RDS"))
-monthly_province_cases <- readRDS(file.path(province.data.dir, "monthly_province_peru_cases.RDS"))
+# --- Minimal required datasets ------------------------------------------------
 
-# --- Minimal required dataset ---------------------------------------------------------
+climate_dt_province <- readRDS(
+  file.path(province.out.dir, "climate_dt_province.RDS"))
+
+# --- Minimal required dataset -------------------------------------------------
 
 # Read composite dataframe
 df <- data.table(read.csv(file.path(
@@ -34,17 +39,7 @@ df <- data.table(read.csv(file.path(
   "ptl_province_inla_df.csv"
 )))
 
-df <- df[, .(
-  # identifiers
-  PROVINCE,
-  YEAR,
-  MONTH,
-  # measures
-  CASES,
-  POP
-)]
-
-# --- Derive required metrics ----------------------------------------------------------
+# --- Derive required metrics --------------------------------------------------
 
 # Derive TIME, an index of month-year (1-140)
 df <- df %>%
@@ -67,8 +62,13 @@ df <- df %>%
     SEASON := if_else(MONTH %in% summer_months, 1, 0)
   )
 
+df[, HISTORICAL_DIR := Lag(DIR, 12), by = "PROVINCE"]
+df[, DIFF_WITH_HISTORICAL_DIR := DIR - HISTORICAL_DIR,
+  by = "PROVINCE"
+]
+
 # Ensure input is a data.table and ordered correctly
-tmp <- copy(monthly_province_cases)
+tmp <- copy(df)
 setorder(tmp, PROVINCE, TIME)
 # Compute 12-month forward DIR and fill in missing differences
 tmp[, `:=`(
@@ -80,20 +80,26 @@ tmp[, `:=`(
   )
 ), by = PROVINCE]
 # Compute 1-month lag of the difference
-tmp[, MODIFIED_DIFF_WITH_HISTORICAL_DIR_LAG := shift(DIFF_WITH_HISTORICAL_DIR, 1),
+tmp[,
+  MODIFIED_DIFF_WITH_HISTORICAL_DIR_LAG := shift(DIFF_WITH_HISTORICAL_DIR, 1),
   by = PROVINCE
 ]
 # Merge the lagged difference back to the original data
 df <- merge(
   df,
-  tmp[, .(PROVINCE, TIME, DIFF_WITH_HISTORICAL_DIR, MODIFIED_DIFF_WITH_HISTORICAL_DIR_LAG)],
+  tmp[,
+    .(PROVINCE,
+      TIME,
+      DIFF_WITH_HISTORICAL_DIR,
+      MODIFIED_DIFF_WITH_HISTORICAL_DIR_LAG)
+  ],
   by = c("PROVINCE", "TIME")
 )
 
 # --- Momentum Indicator ---
 log_info("Momentum Indicator")
 # Filter and order
-tmp <- copy(monthly_province_cases)
+tmp <- copy(df)
 setorder(tmp, PROVINCE, TIME)
 # Compute 3-period RSI on DIR
 tmp[, RSI_DIR := RSI(DIR, n = 3), by = PROVINCE]
@@ -123,10 +129,10 @@ df <- merge(
 # Revert to data frame and rename for processing
 ptl_province_inla_df <- data.table(df)
 
-# --- Original code --------------------------------------------------------------------
+# --- Original code ------------------------------------------------------------
 
 admin1_region_names <- c("Piura", "Tumbes", "Lambayeque")
-tmp <- subset(monthly_province_cases, REGION %in% admin1_region_names)
+tmp <- subset(df, REGION %in% admin1_region_names)
 provinces_with_cases <- unique(tmp$PROVINCE)
 ptl_climate_dt_province <- subset(
   climate_dt_province,
@@ -168,13 +174,10 @@ provinces <- unique(ptl_province_inla_df$PROVINCE)
 num_provinces <- length(provinces)
 maximum_climate_lag <- 4 # Upper bound on lags used
 
-i <- as.numeric(xargs$index)
-filename_i <- xargs$output
-
 log_info("Processing file: ", filename_i)
 # This is the key to setting which month we are forecasting
+i <- unique(ptl_province_inla_df$TIME[ptl_province_inla_df$end_of_month == target_date])[1] - 1
 idx.pred <- seq(i * num_provinces + 1, i * num_provinces + num_provinces)
-s <- 5000
 rt_forecast_dt <- data.table(ptl_province_inla_df)
 setkeyv(rt_forecast_dt, c("TIME", "PROVINCE"))
 rt_forecast_dt[, IND := seq(1, nrow(rt_forecast_dt))]
@@ -192,14 +195,16 @@ setkeyv(ptl_climate_dt_province, c("YEAR", "MONTH", "PROVINCE"))
 
 
 # Setting up DLNMs
-rt_forecast_lag_tmax <- tsModel::Lag(ptl_climate_dt_province$tmax,
+rt_forecast_lag_tmax <- tsModel::Lag(
+  ptl_climate_dt_province$tmax,
   group = ptl_climate_dt_province$PROVINCE,
   k = 1:maximum_climate_lag
 )
 # Note we have excluded zeroth lag as we forecast with one month horizon
 
 # We start in the 5th month of the first year
-rt_forecast_lag_tmax <- rt_forecast_lag_tmax[(num_provinces * 4 + 1):nrow(rt_forecast_lag_tmax), ]
+rt_forecast_lag_tmax <- rt_forecast_lag_tmax[
+  (num_provinces * 4 + 1):nrow(rt_forecast_lag_tmax), ]
 
 # Only keep first 3
 rt_forecast_lag_tmax <- rt_forecast_lag_tmax[1:nrow(rt_forecast_dt), 1:3]
@@ -210,7 +215,8 @@ rt_forecast_lag_tmin <- tsModel::Lag(ptl_climate_dt_province$tmin,
   group = ptl_climate_dt_province$PROVINCE,
   k = 1:maximum_climate_lag
 )
-rt_forecast_lag_tmin <- rt_forecast_lag_tmin[(num_provinces * 4 + 1):nrow(rt_forecast_lag_tmin), ]
+rt_forecast_lag_tmin <- rt_forecast_lag_tmin[
+  (num_provinces * 4 + 1):nrow(rt_forecast_lag_tmin), ]
 rt_forecast_lag_tmin <- rt_forecast_lag_tmin[1:nrow(rt_forecast_dt), 1:3]
 
 # Precipitation (prec)
@@ -218,7 +224,8 @@ rt_forecast_lag_prec <- tsModel::Lag(ptl_climate_dt_province$prec,
   group = ptl_climate_dt_province$PROVINCE,
   k = 1:maximum_climate_lag
 )
-rt_forecast_lag_prec <- rt_forecast_lag_prec[(num_provinces * 4 + 1):nrow(rt_forecast_lag_prec), ]
+rt_forecast_lag_prec <- rt_forecast_lag_prec[
+  (num_provinces * 4 + 1):nrow(rt_forecast_lag_prec), ]
 rt_forecast_lag_prec <- rt_forecast_lag_prec[1:nrow(rt_forecast_dt), 1:3]
 
 # tmax (tmax)
@@ -226,24 +233,31 @@ rt_forecast_lag_tmax_roll_2 <- tsModel::Lag(ptl_climate_dt_province$tmax_roll_2,
   group = ptl_climate_dt_province$PROVINCE,
   k = 1:maximum_climate_lag
 )
-rt_forecast_lag_tmax_roll_2 <- rt_forecast_lag_tmax_roll_2[(num_provinces * 4 + 1):nrow(rt_forecast_lag_tmax_roll_2), ]
-rt_forecast_lag_tmax_roll_2 <- rt_forecast_lag_tmax_roll_2[1:nrow(rt_forecast_dt), 1:3]
+rt_forecast_lag_tmax_roll_2 <- rt_forecast_lag_tmax_roll_2[
+  (num_provinces * 4 + 1):nrow(rt_forecast_lag_tmax_roll_2), ]
+rt_forecast_lag_tmax_roll_2 <- rt_forecast_lag_tmax_roll_2[
+  1:nrow(rt_forecast_dt), 1:3]
 
 # tmin(tmin_roll_2)
 rt_forecast_lag_tmin_roll_2 <- tsModel::Lag(ptl_climate_dt_province$tmin_roll_2,
   group = ptl_climate_dt_province$PROVINCE,
   k = 1:maximum_climate_lag
 )
-rt_forecast_lag_tmin_roll_2 <- rt_forecast_lag_tmin_roll_2[(num_provinces * 4 + 1):nrow(rt_forecast_lag_tmin_roll_2), ]
-rt_forecast_lag_tmin_roll_2 <- rt_forecast_lag_tmin_roll_2[1:nrow(rt_forecast_dt), 1:3]
+rt_forecast_lag_tmin_roll_2 <- rt_forecast_lag_tmin_roll_2[
+  (num_provinces * 4 + 1):nrow(rt_forecast_lag_tmin_roll_2), ]
+rt_forecast_lag_tmin_roll_2 <- rt_forecast_lag_tmin_roll_2[
+  1:nrow(rt_forecast_dt), 1:3]
 
 # precipitation (prec_roll_2)
-rt_forecast_lag_prec_roll_2 <- tsModel::Lag(ptl_climate_dt_province$prec_roll_2,
+rt_forecast_lag_prec_roll_2 <- tsModel::Lag(
+  ptl_climate_dt_province$prec_roll_2,
   group = ptl_climate_dt_province$PROVINCE,
   k = 1:maximum_climate_lag
 )
-rt_forecast_lag_prec_roll_2 <- rt_forecast_lag_prec_roll_2[(num_provinces * 4 + 1):nrow(rt_forecast_lag_prec_roll_2), ]
-rt_forecast_lag_prec_roll_2 <- rt_forecast_lag_prec_roll_2[1:nrow(rt_forecast_dt), 1:3]
+rt_forecast_lag_prec_roll_2 <- rt_forecast_lag_prec_roll_2[
+  (num_provinces * 4 + 1):nrow(rt_forecast_lag_prec_roll_2), ]
+rt_forecast_lag_prec_roll_2 <- rt_forecast_lag_prec_roll_2[
+  1:nrow(rt_forecast_dt), 1:3]
 
 
 # SPI-6
@@ -251,63 +265,75 @@ rt_forecast_lag_spi <- tsModel::Lag(ptl_climate_dt_province$SPI_6,
   group = ptl_climate_dt_province$PROVINCE,
   k = 1:maximum_climate_lag
 )
-rt_forecast_lag_spi <- rt_forecast_lag_spi[(num_provinces * 4 + 1):nrow(rt_forecast_lag_spi), ]
+rt_forecast_lag_spi <- rt_forecast_lag_spi[
+  (num_provinces * 4 + 1):nrow(rt_forecast_lag_spi), ]
 rt_forecast_lag_spi <- rt_forecast_lag_spi[1:nrow(rt_forecast_dt), 1:2] # Only keep up to lag 2
 
 # ONI
 rt_forecast_lag_oni <- tsModel::Lag(ptl_climate_dt_province$ANOM,
   k = 1:maximum_climate_lag
 )
-rt_forecast_lag_oni <- rt_forecast_lag_oni[(num_provinces * 4 + 1):nrow(rt_forecast_lag_oni), ]
+rt_forecast_lag_oni <- rt_forecast_lag_oni[
+  (num_provinces * 4 + 1):nrow(rt_forecast_lag_oni), ]
 rt_forecast_lag_oni <- rt_forecast_lag_oni[1:nrow(rt_forecast_dt), 1:4]
 
 # ICEN
 rt_forecast_lag_icen <- tsModel::Lag(ptl_climate_dt_province$E_INDEX,
   k = 1:maximum_climate_lag
 )
-rt_forecast_lag_icen <- rt_forecast_lag_icen[(num_provinces * 4 + 1):nrow(rt_forecast_lag_icen), ]
+rt_forecast_lag_icen <- rt_forecast_lag_icen[
+  (num_provinces * 4 + 1):nrow(rt_forecast_lag_icen), ]
 rt_forecast_lag_icen <- rt_forecast_lag_icen[1:nrow(rt_forecast_dt), 1:4]
 
 lagknot <- c(1, 2) # 1+2 months for lag knots
 tmax_basis <- crossbasis(rt_forecast_lag_tmax,
-  argvar = list(fun = "bs", knots = equalknots(ptl_climate_dt_province$tmax, 2)),
+  argvar = list(fun = "bs",
+                knots = equalknots(ptl_climate_dt_province$tmax, 2)),
   arglag = list(fun = "bs", knots = lagknot)
 )
 tmin_basis <- crossbasis(rt_forecast_lag_tmin,
-  argvar = list(fun = "bs", knots = equalknots(ptl_climate_dt_province$tmin, 2)),
+  argvar = list(fun = "bs",
+                knots = equalknots(ptl_climate_dt_province$tmin, 2)),
   arglag = list(fun = "bs", knots = lagknot)
 )
 
 prec_basis <- crossbasis(rt_forecast_lag_prec,
-  argvar = list(fun = "bs", knots = equalknots(ptl_climate_dt_province$prec, 2)),
+  argvar = list(fun = "bs",
+                knots = equalknots(ptl_climate_dt_province$prec, 2)),
   arglag = list(fun = "bs", knots = lagknot)
 )
 
 tmax_roll_2_basis <- crossbasis(rt_forecast_lag_tmax_roll_2,
-  argvar = list(fun = "bs", knots = equalknots(ptl_climate_dt_province$tmax_roll_2, 2)),
+  argvar = list(fun = "bs",
+                knots = equalknots(ptl_climate_dt_province$tmax_roll_2, 2)),
   arglag = list(fun = "bs", knots = lagknot)
 )
 tmin_roll_2_basis <- crossbasis(rt_forecast_lag_tmin_roll_2,
-  argvar = list(fun = "bs", knots = equalknots(ptl_climate_dt_province$tmin_roll_2, 2)),
+  argvar = list(fun = "bs",
+                knots = equalknots(ptl_climate_dt_province$tmin_roll_2, 2)),
   arglag = list(fun = "bs", knots = lagknot)
 )
 
 prec_roll_2_basis <- crossbasis(rt_forecast_lag_prec_roll_2,
-  argvar = list(fun = "bs", knots = equalknots(ptl_climate_dt_province$prec_roll_2, 2)),
+  argvar = list(fun = "bs",
+                knots = equalknots(ptl_climate_dt_province$prec_roll_2, 2)),
   arglag = list(fun = "bs", knots = lagknot)
 )
 
 spi_basis <- crossbasis(rt_forecast_lag_spi,
-  argvar = list(fun = "bs", knots = equalknots(ptl_climate_dt_province$SPI_6, 2)),
+  argvar = list(fun = "bs",
+                knots = equalknots(ptl_climate_dt_province$SPI_6, 2)),
   arglag = list(fun = "bs", knots = 1)
 )
 
 oni_basis <- crossbasis(rt_forecast_lag_oni,
-  argvar = list(fun = "bs", knots = equalknots(ptl_climate_dt_province$ANOM, 2)),
+  argvar = list(fun = "bs",
+                knots = equalknots(ptl_climate_dt_province$ANOM, 2)),
   arglag = list(fun = "bs", knots = 2)
 )
 icen_basis <- crossbasis(rt_forecast_lag_icen,
-  argvar = list(fun = "bs", knots = equalknots(ptl_climate_dt_province$E_INDEX, 2)),
+  argvar = list(fun = "bs",
+                knots = equalknots(ptl_climate_dt_province$E_INDEX, 2)),
   arglag = list(fun = "bs", knots = 2)
 )
 colnames(tmax_basis) <- paste0("tmax_basis.", colnames(tmax_basis))
@@ -316,18 +342,26 @@ colnames(prec_basis) <- paste0("prec_basis.", colnames(prec_basis))
 colnames(spi_basis) <- paste0("spi_basis.", colnames(spi_basis))
 colnames(oni_basis) <- paste0("oni_basis.", colnames(oni_basis))
 colnames(icen_basis) <- paste0("icen_basis.", colnames(icen_basis))
-colnames(tmax_roll_2_basis) <- paste0("tmax_roll_2_basis.", colnames(tmax_roll_2_basis))
-colnames(tmin_roll_2_basis) <- paste0("tmin_roll_2_basis.", colnames(tmin_roll_2_basis))
-colnames(prec_roll_2_basis) <- paste0("prec_roll_2_basis.", colnames(prec_roll_2_basis))
+colnames(tmax_roll_2_basis) <- paste0("tmax_roll_2_basis.",
+                                      colnames(tmax_roll_2_basis))
+colnames(tmin_roll_2_basis) <- paste0("tmin_roll_2_basis.",
+                                      colnames(tmin_roll_2_basis))
+colnames(prec_roll_2_basis) <- paste0("prec_roll_2_basis.",
+                                      colnames(prec_roll_2_basis))
 
 #
 prior.prec <- list(prec = list(prior = "pc.prec", param = c(0.5, 0.01)))
-forecast_formula <- CASES ~ 1 + f(MONTH,
-  replicate = PROV_IND, model = "rw1", cyclic = TRUE,
-  constr = TRUE, scale.model = TRUE, hyper = prior.prec
-) +
-  f(YEAR, replicate = PROV_IND, model = "iid") + f(PROV_IND,
-    model = "bym2", hyper = prior.prec, scale.model = TRUE, graph = file.path(
+forecast_formula <- CASES ~ 1 +
+  f(MONTH,
+    replicate = PROV_IND, model = "rw1", cyclic = TRUE,
+    constr = TRUE, scale.model = TRUE, hyper = prior.prec
+  ) +
+  f(YEAR, replicate = PROV_IND, model = "iid") +
+  f(PROV_IND,
+    model = "bym2",
+    hyper = prior.prec,
+    scale.model = TRUE,
+    graph = file.path(
       province.inla.data.in.dir,
       "nbr_piura_tumbes_lambayeque.graph"
     )
@@ -341,13 +375,17 @@ tmp_climate_cv_fit <- run_province_model_func( # most of the runtime is here
   data = rt_forecast_dt,
   formula = forecast_formula
 )
-xx <- inla.posterior.sample(s, tmp_climate_cv_fit)
-xx.s <- inla.posterior.sample.eval(function(...) c(theta[1], Predictor[idx.pred]), xx)
-y.pred <- matrix(NA, num_provinces, s)
-dir.pred <- matrix(NA, num_provinces, s)
-for (s.idx in 1:s) { # sample ID
+xx <- inla.posterior.sample(samples, tmp_climate_cv_fit)
+xx.s <- inla.posterior.sample.eval(
+  function(...) c(theta[1], Predictor[idx.pred]), xx)
+y.pred <- matrix(NA, num_provinces, samples)
+dir.pred <- matrix(NA, num_provinces, samples)
+for (s.idx in 1:samples) { # sample ID
   xx.sample <- xx.s[, s.idx]
-  y.pred[, s.idx] <- rzipois(num_provinces, lambda = exp(xx.sample[-1]), pstr0 = xx.sample[1])
+  y.pred[, s.idx] <- rzipois(
+    num_provinces,
+    lambda = exp(xx.sample[-1]),
+    pstr0 = xx.sample[1])
   dir.pred[, s.idx] <- y.pred[, s.idx] / pop_offsets
 }
 

@@ -22,7 +22,7 @@ models = {
     str(dir.name).replace("Ensemble_", "").replace("_", " ").replace("star", "*"): str(
         dir.name
     )
-    for dir in sorted(Path(FOLDER_PATH).iterdir())
+    for dir in sorted(Path(FOLDER_PATH).iterdir()) if not dir.name.startswith("Covar")
 }
 metrics = {
     "Cases": "cases_quantiles",
@@ -54,21 +54,22 @@ with st.spinner("Analysing datasets..."):
             df[["YEAR", "MONTH"]].assign(day=1)
         ) + pd.offsets.MonthEnd(0)
     df["target_end_date"] = pd.to_datetime(df["target_end_date"])
+    df.fillna(0)
 
     if metric == "cases_quantiles":
         df["prediction"] = np.exp(df["prediction"]) - 1
         df["true_value"] = np.exp(df["true_value"]) - 1
 
-    df_median = df[df["quantile"] == 0.5]
-    df_q05 = df[df["quantile"] == 0.05]
-    df_q95 = df[df["quantile"] == 0.95]
-
     def overlay_plot(data, color, **kwargs):
         ax = plt.gca()
+
+        # Sort data by target_end_date
+        data = data.sort_values("target_end_date")
+
         ax.fill_between(
-            data[data["quantile"] == 0.5]["target_end_date"],
-            data[data["quantile"] == 0.05]["prediction"],
-            data[data["quantile"] == 0.95]["prediction"],
+            data[data["quantile"] == 0.5]["target_end_date"].values,
+            data[data["quantile"] == 0.05]["prediction"].values,
+            data[data["quantile"] == 0.95]["prediction"].values,
             color="green",
             alpha=0.1,
             label="95% Interval",

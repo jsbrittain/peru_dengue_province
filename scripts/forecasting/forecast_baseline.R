@@ -37,19 +37,6 @@ df <- data.table(
   read.csv(file.path(province_python_data_dir, "ptl_province_inla_df.csv"))
 )
 
-# This is the subset of columns (out of the original 58) that are actually
-# required for this analysis.
-
-df <- df[, .(
-  # identifiers
-  PROVINCE,
-  YEAR,
-  MONTH,
-  # measures
-  CASES,
-  POP
-)]
-
 # --- Derive required metrics --------------------------------------------------
 
 # Derive TIME, an index of month-year (1-140)
@@ -104,8 +91,9 @@ new_quantile_baseline <- function(inc_diffs, symmetrize = TRUE) {
 }
 
 # Predict using quantile baseline object
-new_predict_quantile_baseline <- function(quantile_baseline, newdata, horizon,
-                                          nsim, ...) {
+new_predict_quantile_baseline <- function(
+  quantile_baseline, newdata, horizon, nsim, ...
+) {
   result <- matrix(NA_real_, nrow = nsim, ncol = horizon)
   last_inc <- newdata
 
@@ -131,8 +119,9 @@ new_predict_quantile_baseline <- function(quantile_baseline, newdata, horizon,
 }
 
 # Predict and save results per province and time
-predict_and_save_baseline <- function(data, province, time, i, j, out_dir,
-                                      nsim = 5000) {
+predict_and_save_baseline <- function(
+  data, province, time, i, j, out_dir, nsim = 5000
+) {
   tmp_data <- subset(data, PROVINCE == province & TIME <= time)
   newdata <- tmp_data[tmp_data$TIME == time, ]$CASES
 

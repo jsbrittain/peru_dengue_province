@@ -25,11 +25,14 @@ metrics = {
     "Cases (from quantiles)": "cases_quantiles",
     "Log cases (from quantiles)": "log_cases_quantiles",
 }
+metrics_cov = {
+    'Value': 'value',
+}
 countries = {
     "Peru": "PER",
-    "Chile": "CHL",
-    "Brazil": "BRA",
-    "Mexico": "MEX",
+    # "Chile": "CHL",
+    # "Brazil": "BRA",
+    # "Mexico": "MEX",
     # "Bolivia": "BOL",
     # "Ecuador": "ECU",
     # "Colombia": "COL",
@@ -63,14 +66,8 @@ country = countries[country_name]
 model_name = st.sidebar.selectbox("Model:", list(models.keys()))
 model = models[model_name]
 
-if model in ["baseline", "bayesian"]:
-    metrics.update(
-        {
-            "Cases (from samples)": "cases_samples",
-            "Log cases (from samples)": "log_cases_samples",
-        }
-    )
-
+if model_name.startswith('Cov'):
+    metrics = metrics_cov
 metric_name = st.sidebar.selectbox("Metric:", list(metrics.keys()))
 metric = metrics[metric_name]
 
@@ -113,7 +110,7 @@ field = fields[field_name]
 
 # --- Load Real Model Data
 match metric:
-    case "cases_sampl_es":
+    case "cases_samples":
         filename = (
             Path("./predictions") / model / "pred_log_cases_samples_forecasting.csv"
         )
@@ -141,6 +138,12 @@ match metric:
             -1
         ]  # last value (should only be one)
         tooltip_text = "Log cases: {data}"
+    case "value":
+        filename = (
+            Path("./predictions") / model / "values.csv"
+        )  # Assuming this is the correct file for Cov models
+        data_transform = lambda df: df['value'].values[-1]  # last value
+        tooltip_text = "Value: {data}"
     case _:
         raise RuntimeError(f"Unrecognised metric: {metric_name}")
 

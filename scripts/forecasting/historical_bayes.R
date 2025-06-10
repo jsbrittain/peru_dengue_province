@@ -1,24 +1,97 @@
+library(sf)
+library(dplyr)
 library(logger)
 library(data.table)
 library(scoringutils)
+library(rgeoboundaries)
 
 # Environment variables
 SNAKEMAKE_CORES <- Sys.getenv("SNAKEMAKE_CORES", unset = "1")
 
-peru.province.base.dir <- file.path(getwd(), "data")
-peru.province.out.dir <- file.path(peru.province.base.dir, "output")
-peru.province.inla.data.out.dir <- file.path(peru.province.base.dir, "INLA/Output")
-peru.province.python.data.dir <- file.path(peru.province.base.dir, "python/data")
-peru.province.predictions.out.dir <- file.path(getwd(), "predictions")
+province.base.dir <- file.path(getwd(), "data")
+province.out.dir <- file.path(province.base.dir, "output")
+province.inla.data.out.dir <- file.path(province.base.dir, "INLA/Output")
+province.python.data.dir <- file.path(province.base.dir, "python/data")
+province.predictions.out.dir <- file.path(getwd(), "predictions")
 
-dir.create(peru.province.out.dir, recursive = TRUE, showWarnings = FALSE)
-dir.create(peru.province.inla.data.out.dir, recursive = TRUE, showWarnings = FALSE)
-dir.create(peru.province.predictions.out.dir, recursive = TRUE, showWarnings = FALSE)
+dir.create(province.out.dir, recursive = TRUE, showWarnings = FALSE)
+dir.create(province.inla.data.out.dir, recursive = TRUE, showWarnings = FALSE)
+dir.create(province.predictions.out.dir, recursive = TRUE, showWarnings = FALSE)
 
-ptl_province_inla_df <- data.table(read.csv(file.path(
-  peru.province.python.data.dir,
-  "ptl_province_inla_df.csv"
-)))
+# --- Minimal required dataset -------------------------------------------------
+
+# Read composite dataframe
+df <- data.table(
+  read.csv(file.path(province.python.data.dir, "ptl_province_inla_df.csv"))
+)
+
+# --- Derive required metrics --------------------------------------------------
+
+# Derive TIME, an index of month-year (1-140)
+df <- df %>%
+  mutate(date = as.Date(paste(YEAR, MONTH, 1, sep = "-")))
+date_lookup <- df %>%
+  select(date) %>%
+  distinct() %>%
+  arrange(date) %>%
+  mutate(TIME = row_number())
+df <- df %>%
+  left_join(date_lookup, by = "date")
+
+# Add additional required columns
+df <- df %>%
+  mutate(
+    POP_OFFSET = POP / 1e5,
+    DIR := CASES / POP * 1e5,
+    LOG_CASES = log1p(CASES)
+  )
+
+# Get ADM2 shapefile and compute centroids
+peru_adm2 <- geoboundaries("Peru", "adm2", quiet = TRUE)
+centroids <- suppressWarnings(st_centroid(peru_adm2))
+# Extract coordinates and keep only required columns
+coordinates_df <- as.data.table(
+  centroids %>%
+    mutate(
+      X = st_coordinates(geometry)[, 1],
+      Y = st_coordinates(geometry)[, 2]
+    ) %>%
+    st_drop_geometry() %>%
+    select(shapeName, X, Y)
+)
+setnames(coordinates_df, "shapeName", "PROVINCE")
+# Identify unmatched provinces
+ptl_region_province <- unique(df[, .(PROVINCE)])
+unmatched <- setdiff(ptl_region_province$PROVINCE, coordinates_df$PROVINCE)
+# Manual fix for encoding issue
+coordinates_df[PROVINCE == "FerreÃ±afe", PROVINCE := "Ferreñafe"]
+# Filter centroids to only provinces present in df
+filtered_coords <- coordinates_df[PROVINCE %in% ptl_region_province$PROVINCE]
+# Merge coordinates into main dataset
+df <- merge(
+  df,
+  filtered_coords[, .(PROVINCE, X, Y)],
+  by.x = "PROVINCE",
+  by.y = "PROVINCE",
+  all.x = TRUE
+)
+setnames(df, c("X", "Y"), c("longitude", "latitude"))
+
+# Revert to data frame and rename for processing
+ptl_province_inla_df <- data.table(df)
+
+# --- Original code ------------------------------------------------------------
+
+
+
+
+
+
+
+
+
+
+
 
 latitude_monthly_dt <- copy(ptl_province_inla_df)
 setkeyv(latitude_monthly_dt, c("latitude", "longitude", "TIME"))
@@ -47,23 +120,33 @@ ptl_province_inla_df[, LOG_DIR := log(DIR + 0.01)]
 
 
 
-# Snakemake call ---
+# Snakemake call --- Can combine with forecast_bayes.R as does the same thing
+# just on another date set.
 
 log_info("Cleaning up old workflow trigger files")
-filestem <- "zi_pois_season_sq_rsi_ns_mod_historical_tmin_roll_2_prec_roll_2_spi_icen_historical_dir.pred"
-file_pattern <- paste0("^", filestem, "*.trigger")
+filestem <- "phbf_pred_"
+file_pattern <- paste0("^", filestem, ".*\\.trigger$")
 file_names <- list.files(
-  path = peru.province.inla.data.out.dir, pattern = file_pattern,
+  path = province.inla.data.out.dir, pattern = file_pattern,
   full.names = TRUE
 )
 file.remove(file_names)
 
+province_first_time_2018 <- min(
+    ptl_province_inla_df[ptl_province_inla_df$YEAR == 2018, ]$TIME
+  )
+
 log_info("Touching triggers for external workflow")
-province_first_time_2018 <- head(ptl_province_inla_df[which(ptl_province_inla_df$YEAR ==
-  2018), ]$TIME, 1) - 1
-file_names <- paste0(peru.province.inla.data.out.dir, "/", filestem, 1:(province_first_time_2018 -
-  1), ".RDS.trigger")
-file.create(file_names)
+# Create workflow trigger files
+for (i in 2:(province_first_time_2018-1)) {
+  date <- format(
+    as.Date(ptl_province_inla_df[ptl_province_inla_df$TIME == i, ]$end_of_month[1]),
+    "%Y-%m-%d")
+  filename_trigger <- file.path(
+    province.inla.data.out.dir,
+    paste0(filestem, date, ".RDS.trigger"))
+  file.create(filename_trigger)
+}
 
 # Launch Snakemake to process
 log_info("Launch Snakemake to process province_historical_bayesian_forecasting_pre")
@@ -78,41 +161,30 @@ system2("snakemake",
 )
 
 log_info("Done with province_historical_bayesian_forecasting_pre")
+
 # Save Results ----
 historical_all_dir.pred <- NULL
-for (i in 1:(province_first_time_2018 - 1)) {
-  file <- file.path(peru.province.inla.data.out.dir, paste0(
-    "zi_pois_season_sq_rsi_ns_mod_historical_tmin_roll_2_prec_roll_2_spi_icen_historical_dir.pred",
-    i, ".RDS"
-  ))
-  log_info("Reading ", file)
-
-  tmp_dir.pred <- readRDS(file = file.path(
-    peru.province.inla.data.out.dir,
-    paste0(
-      "zi_pois_season_sq_rsi_ns_mod_historical_tmin_roll_2_prec_roll_2_spi_icen_historical_dir.pred",
-      i, ".RDS"
-    )
-  ))
+province_list <- unique(ptl_province_inla_df$PROVINCE)
+for (i in 2:(province_first_time_2018 - 1)) {
+  date <- format(
+    as.Date(ptl_province_inla_df[ptl_province_inla_df$TIME == i, ]$end_of_month[1]),
+    "%Y-%m-%d")
+  filename <- file.path(
+    province.inla.data.out.dir,
+    paste0(filestem, date, ".RDS"))
+  log_info(paste0("Reading ", filename))
+  tmp_dir.pred <- readRDS(file = filename)
+  tmp_dir.pred <- as.data.table(tmp_dir.pred)
+  tmp_dir.pred[, PROVINCE := province_list]
+  tmp_dir.pred[, TIME := i]
   historical_all_dir.pred <- rbind(historical_all_dir.pred, tmp_dir.pred)
 }
 
-saveRDS(historical_all_dir.pred, file = file.path(
-  peru.province.inla.data.out.dir,
-  paste0("historical_all_dir.pred.RDS")
-))
-
-
-historical_all_dir.pred <- readRDS(file = file.path(
-  peru.province.inla.data.out.dir,
-  paste0("historical_all_dir.pred.RDS")
-))
-
 climate_dir.pred.dt_2010_2018 <- data.table(historical_all_dir.pred)
-climate_dir.pred.dt_2010_2018[, PROVINCE := ptl_province_inla_df[which(TIME >
-  1 & TIME <= province_first_time_2018)]$PROVINCE]
-climate_dir.pred.dt_2010_2018[, TIME := ptl_province_inla_df[which(TIME >
-  1 & TIME <= province_first_time_2018)]$TIME]
+# climate_dir.pred.dt_2010_2018[, PROVINCE := ptl_province_inla_df[which(TIME >
+#   1 & TIME <= province_first_time_2018)]$PROVINCE]
+# climate_dir.pred.dt_2010_2018[, TIME := ptl_province_inla_df[which(TIME >
+#   1 & TIME <= province_first_time_2018)]$TIME]
 climate_dir.pred.dt_2010_2018 <- melt(climate_dir.pred.dt_2010_2018, id.vars = c(
   "PROVINCE",
   "TIME"
@@ -126,50 +198,35 @@ by = c("PROVINCE", "TIME")
 climate_dir.pred.dt_2010_2018[, sample := rep(seq(1, 5000, by = 1), nrow(climate_dir.pred.dt_2010_2018) / 5000)]
 setnames(climate_dir.pred.dt_2010_2018, "DIR", "true_value")
 climate_dir.pred.dt_2010_2018[, model := "climate"]
-saveRDS(climate_dir.pred.dt_2010_2018, file = file.path(
-  peru.province.inla.data.out.dir,
-  "climate_dir.pred.dt_2010_2018.RDS"
-))
 
-
-
-climate_dir_pred.dt_2010_2018 <- readRDS(file = file.path(
-  peru.province.inla.data.out.dir,
-  "climate_dir.pred.dt_2010_2018.RDS"
-))
 tmp <- subset(ptl_province_inla_df, select = c(
   "TIME", "PROVINCE", "POP_OFFSET",
   "LOG_CASES"
 ))
 
-climate_log_cases.dt_2010_2018 <- merge(climate_dir_pred.dt_2010_2018, tmp, by = c(
-  "TIME",
-  "PROVINCE"
-))
+climate_log_cases.dt_2010_2018 <- merge(
+  climate_dir.pred.dt_2010_2018, tmp,
+  by = c(
+    "TIME",
+    "PROVINCE"
+  ))
 climate_log_cases.dt_2010_2018[, prediction := log1p(prediction * POP_OFFSET)]
 climate_log_cases.dt_2010_2018[, true_value := log1p(true_value * POP_OFFSET)]
-saveRDS(climate_log_cases.dt_2010_2018, file = file.path(
-  peru.province.inla.data.out.dir,
-  "climate_log_cases.dt_2010_2018.RDS"
-))
-
+# was climate_log_cases.dt_2010_2018.RDS
 log_info("Writing log cases samples (historical)")
 write.csv(climate_log_cases.dt_2010_2018,
-  paste0(peru.province.predictions.out.dir, "/pred_log_cases_samples_historical.csv"),
+  paste0(province.predictions.out.dir, "/pred_log_cases_samples_historical.csv"),
   row.names = FALSE
 )
 
-climate_2010_2018_log_cases_quantile_dt <- sample_to_quantile(climate_log_cases.dt_2010_2018,
+climate_2010_2018_log_cases_quantile_dt <- sample_to_quantile(
+  climate_log_cases.dt_2010_2018,
   quantiles = c(0.01, 0.025, seq(0.05, 0.95, 0.05), 0.975, 0.99)
 )
-saveRDS(climate_2010_2018_log_cases_quantile_dt, file = file.path(
-  peru.province.inla.data.out.dir,
-  "climate_2010_2018_log_cases_quantile_dt.RDS"
-))
-
+# was climate_2010_2018_log_cases_quantile_dt.RDS
 log_info("Writing log cases quantiles (historical)")
 write.csv(climate_2010_2018_log_cases_quantile_dt,
-  paste0(peru.province.predictions.out.dir, "/pred_log_cases_quantiles_historical.csv"),
+  paste0(province.predictions.out.dir, "/pred_log_cases_quantiles_historical.csv"),
   row.names = FALSE
 )
 
@@ -178,9 +235,5 @@ write.csv(climate_2010_2018_log_cases_quantile_dt,
 climate_dir_2010_2018_forecast_quantile_dt <- sample_to_quantile(climate_dir.pred.dt_2010_2018,
   quantiles = c(0.01, 0.025, seq(0.05, 0.95, 0.05), 0.975, 0.99)
 )
-saveRDS(climate_dir_2010_2018_forecast_quantile_dt, file = file.path(
-  peru.province.inla.data.out.dir,
-  paste0("climate_2010_2018_forecast_quantile_dt.RDS")
-))
 
 log_info("Done with province_historical_bayesian_forecasting.R")
