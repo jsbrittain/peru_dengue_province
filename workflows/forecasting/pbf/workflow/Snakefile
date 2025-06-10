@@ -6,20 +6,20 @@ filestem = config['filestem']
 
 rule all:
     input:
-        ['.'.join(file.split('.')[:-1]) for file in glob(f'{dirstem}/{filestem}*.RDS.trigger')]
+        ['.'.join(file.split('.')[:-1]) for file in glob(f'{dirstem}/{filestem}_*.RDS.trigger')]
 
-rule phbf:
+rule pbf:
     input:
-        trigger = ancient(f'{dirstem}/{filestem}{{index}}.RDS.trigger'),
+        trigger = ancient(f'{dirstem}/{filestem}_{{date}}.RDS.trigger'),
         script = ancient('workflows/forecasting/pbf/workflow/scripts/pbf.R'),
     output:
-        outfile = f"{dirstem}/{filestem}{{index}}.RDS",
+        outfile = f"{dirstem}/{filestem}_{{date}}.RDS",
     params:
         outdir = dirstem,
     shell:
         """
         mkdir -p {params.outdir}
         Rscript {input.script} \
-            --index {wildcards.index} \
+            --date {wildcards.date} \
             --output {output.outfile}
         """

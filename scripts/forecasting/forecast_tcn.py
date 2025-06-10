@@ -2,6 +2,7 @@
 
 import os
 import logging
+import numpy as np
 import pandas as pd
 
 from darts import TimeSeries
@@ -15,10 +16,6 @@ from darts.dataprocessing.transformers import Scaler
 FORCE_RERUN = os.environ.get("FORCE_RERUN", "false").lower() == "true"
 HORIZON_MONTHS = int(os.environ.get("HORIZON_MONTHS", "48"))
 RETRAIN_MODELS = os.environ.get("RETRAIN_MODELS", "true").lower() == "true"
-MAX_WORKERS = int(os.environ.get("MAX_WORKERS", os.cpu_count()))
-
-# Best not to use threadpools with this function as darts is highly threaded.
-USE_THREADPOOL = False
 
 logging.basicConfig(level=logging.INFO)
 
@@ -30,25 +27,44 @@ Path(output_dir).mkdir(parents=True, exist_ok=True)
 # --- Load data ------------------------------------------------------------------------
 
 timeseries_df = pd.read_csv("/app/data/python/data/ptl_province_inla_df.csv")
-timeseries_df = timeseries_df.fillna(0)
-province_names = timeseries_df["PROVINCE"].unique()
-province_count = len(province_names)
+climate_df = pd.read_csv("/app/data/output/climate_dt_province.csv")
 
-# Required columns
-base_cols = ["PROVINCE", "end_of_month", "YEAR"]
+# Isolate required columns 
+base_cols = ["PROVINCE", "MONTH", "YEAR", "end_of_month", "CASES"]
+
+# These vectors are used for the TCN model
+case_cols = ["LOG_CASES"]  # must be univariate (only one column)
 covariate_cols = ["LAG_1_LOG_CASES", "LAG_1_tmin_roll_2", "LAG_1_prec_roll_2"]
-case_cols = ["LOG_CASES"]
 
 # --- Minimal required dataset ---------------------------------------------------------
 
-timeseries_df = timeseries_df[[*base_cols, *case_cols, *covariate_cols]]
+timeseries_df = timeseries_df[base_cols]
+timeseries_df["LOG_CASES"] = np.log1p(timeseries_df["CASES"])
+timeseries_df["LAG_1_LOG_CASES"] = timeseries_df.groupby("PROVINCE")[
+    "LOG_CASES"
+].shift(1)
+
+# Merge climate data
+timeseries_df = timeseries_df.merge(
+    climate_df, on=["PROVINCE", "YEAR", "MONTH"], how="left"
+)
+timeseries_df["LAG_1_tmin_roll_2"] = (
+    timeseries_df.groupby("PROVINCE")["tmin_roll_2"].shift(1)
+)
+timeseries_df["LAG_1_prec_roll_2"] = (
+    timeseries_df.groupby("PROVINCE")["prec_roll_2"].shift(1)
+)
+
+timeseries_df['end_of_month'] = pd.to_datetime(timeseries_df['end_of_month'])
+timeseries_df.fillna(0, inplace=True)  # Fill any remaining NaNs with 0
 
 # --------------------------------------------------------------------------------------
 
+province_names = timeseries_df["PROVINCE"].unique()
+province_count = len(province_names)
 
 # If needed for working with standardised/scaled variables
 scaler_covars = Scaler()
-
 
 # ## 1) TCN MODEL Setup
 
@@ -64,7 +80,7 @@ tcn_model = TCNModel(
     save_checkpoints=True,
     force_reset=True,
     n_epochs=150,
-    optimizer_kwargs={"lr": 1e-2},
+    optimizer_kwargs={"lr": 1e-4},
 )
 
 
@@ -79,11 +95,11 @@ def historical_tcn(i, timeseries_df):
     subset_df = subset_df[subset_df["YEAR"] < 2018]
 
     # DEEP TCN
-    target_series = [
+    target_series = (
         TimeSeries.from_dataframe(
             subset_df, time_col="end_of_month", value_cols=case_cols
         )
-    ]
+    )
     covariate_series = [
         TimeSeries.from_dataframe(
             subset_df, time_col="end_of_month", value_cols=covariate_cols
@@ -92,13 +108,13 @@ def historical_tcn(i, timeseries_df):
     covariates_scaled = scaler_covars.fit_transform(covariate_series)
 
     tcn_model.fit(
-        series=target_series[0],
+        series=target_series,
         past_covariates=covariates_scaled,
         epochs=150,
         verbose=False,
     )
     tcn_backtest = tcn_model.historical_forecasts(
-        series=target_series[0],
+        series=target_series,
         past_covariates=covariates_scaled,
         forecast_horizon=1,
         num_samples=2500,
@@ -106,7 +122,7 @@ def historical_tcn(i, timeseries_df):
         verbose=True,
     )
     tmp = TimeSeries.all_values(tcn_backtest)
-    tmp = tmp.reshape(-1, 2500)
+    tmp = tmp.reshape(-1, 2500)  # (num_forecasts x 1<univariate> x 2500 = num_samples)
     tcn_df = pd.DataFrame(tmp)
 
     tcn_df.to_csv(fname)
@@ -183,20 +199,9 @@ def window_tcn(i, timeseries_df):
     tcn_df.to_csv(fname)
 
 
-# Submit all jobs to the thread pool
-
-if USE_THREADPOOL:
-    with ProcessPoolExecutor(max_workers=MAX_WORKERS) as executor:
-        logging.info(f"Available workers: {executor._max_workers}")
-        logging.info(f"Launching {2*province_count} jobs.")
-        futures = []
-        for i in range(province_count):
-            futures.append(executor.submit(historical_tcn, i, timeseries_df))
-            futures.append(executor.submit(window_tcn, i, timeseries_df))
-        wait(futures)
-else:
-    for i in range(province_count):
-        historical_tcn(i, timeseries_df)
-        window_tcn(i, timeseries_df)
+# Do not use threadpools with this function as darts is highly threaded.
+for i in range(province_count):
+    historical_tcn(i, timeseries_df)
+    window_tcn(i, timeseries_df)
 
 logging.info("Finished TCN.")

@@ -19,7 +19,7 @@ models = {
     str(dir.name).replace("Ensemble_", "").replace("_", " ").replace("star", "*"): str(
         dir.name
     )
-    for dir in sorted(Path(FOLDER_PATH).iterdir())
+    for dir in sorted(Path(FOLDER_PATH).iterdir()) if not dir.name.startswith("Covar")
 }
 metrics = {
     "Cases (from quantiles)": "cases_quantiles",

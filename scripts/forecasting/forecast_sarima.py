@@ -3,6 +3,7 @@
 
 import os
 import logging
+import numpy as np
 import pandas as pd
 
 from pathlib import Path
@@ -26,19 +27,38 @@ Path(output_dir).mkdir(parents=True, exist_ok=True)
 
 timeseries_df = pd.read_csv("/app/data/python/data/ptl_province_inla_df.csv")
 timeseries_df = timeseries_df.fillna(0)
-province_names = timeseries_df["PROVINCE"].unique()
-province_count = len(province_names)
+
+climate_df = pd.read_csv("/app/data/output/climate_dt_province.csv")
+climate_df = climate_df.fillna(0)
 
 # Required columns
-base_cols = ["PROVINCE", "end_of_month"]
+base_cols = ["PROVINCE", "MONTH", "YEAR", "end_of_month", "CASES"]
+case_cols = ["LOG_CASES"]  # must be univariate (only one column)
 covariate_cols = ["LAG_1_LOG_CASES", "LAG_1_tmin_roll_2", "LAG_1_prec_roll_2"]
-case_cols = ["LOG_CASES"]
 
 # --- Minimal required dataset ---------------------------------------------------------
 
-timeseries_df = timeseries_df[[*base_cols, *case_cols, *covariate_cols]]
+timeseries_df = timeseries_df[base_cols]
+timeseries_df["LOG_CASES"] = np.log1p(timeseries_df["CASES"])
+timeseries_df["LAG_1_LOG_CASES"] = timeseries_df.groupby("PROVINCE")[
+    "LOG_CASES"
+].shift(1)
+
+# Merge climate data
+timeseries_df = timeseries_df.merge(
+    climate_df, on=["PROVINCE", "YEAR", "MONTH"], how="left"
+)
+timeseries_df["LAG_1_tmin_roll_2"] = (
+    timeseries_df.groupby("PROVINCE")["tmin_roll_2"].shift(1)
+)
+timeseries_df["LAG_1_prec_roll_2"] = (
+    timeseries_df.groupby("PROVINCE")["prec_roll_2"].shift(1)
+)
 
 # --------------------------------------------------------------------------------------
+
+province_names = timeseries_df["PROVINCE"].unique()
+province_count = len(province_names)
 
 
 # Historical SARIMA forecasting

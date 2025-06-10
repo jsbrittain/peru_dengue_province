@@ -130,23 +130,40 @@ rule proc_province:
             -v {WORKDIR}/scripts:/app/scripts:ro \
             -v {WORKDIR}/workflows:/app/workflows:ro \
             -v {WORKDIR}/data:/app/data \
+            peru-build \
+            R -e 'source("scripts/processing/case_data.R")'
+
+        docker run --rm --platform linux/amd64 \
+            -v {WORKDIR}/scripts:/app/scripts:ro \
+            -v {WORKDIR}/workflows:/app/workflows:ro \
+            -v {WORKDIR}/data:/app/data \
             -e SNAKEMAKE_CORES="{SNAKEMAKE_CORES}" \
             peru-build \
-            R -e 'source("scripts/processing/province_01.R")'
+            R -e 'source("scripts/processing/climate.R")'
 
         docker run --rm --platform linux/amd64 \
             -v {WORKDIR}/scripts:/app/scripts:ro \
             -v {WORKDIR}/workflows:/app/workflows:ro \
             -v {WORKDIR}/data:/app/data \
             peru-build \
-            R -e 'source("scripts/processing/province_02.R")'
+            R -e 'source("scripts/processing/peru_neighbours.R")'
+        """
 
+rule extract_covars:
+    input:
+        "data/processed/province/.done",
+    output:
+        touch("data/covars/.done")
+    shell:
+        """
+        docker build --platform linux/amd64 -t peru-build .
         docker run --rm --platform linux/amd64 \
             -v {WORKDIR}/scripts:/app/scripts:ro \
             -v {WORKDIR}/workflows:/app/workflows:ro \
             -v {WORKDIR}/data:/app/data \
+            -v {WORKDIR}/predictions:/app/predictions \
             peru-build \
-            R -e 'source("scripts/processing/province_export_csv.R")'
+            R -e 'source("scripts/covars/extract_covars.R")'
         """
 
 # =========================
@@ -177,15 +194,15 @@ rule model_bayes_climate:
         mkdir -p {WORKDIR}/predictions/bayesian
         docker build --platform linux/amd64 -t peru-build .
 
-        # Historical predictions
-        docker run --rm --platform linux/amd64 \
-            -v {WORKDIR}/scripts:/app/scripts:ro \
-            -v {WORKDIR}/workflows:/app/workflows:ro \
-            -v {WORKDIR}/data:/app/data \
-            -v {WORKDIR}/predictions/bayesian:/app/predictions \
-            -e SNAKEMAKE_CORES="{SNAKEMAKE_CORES}" \
-            peru-build \
-            R -e 'source("scripts/forecasting/historical_bayes.R")'
+        # # Historical predictions
+        # docker run --rm --platform linux/amd64 \
+        #     -v {WORKDIR}/scripts:/app/scripts:ro \
+        #     -v {WORKDIR}/workflows:/app/workflows:ro \
+        #     -v {WORKDIR}/data:/app/data \
+        #     -v {WORKDIR}/predictions/bayesian:/app/predictions \
+        #     -e SNAKEMAKE_CORES="{SNAKEMAKE_CORES}" \
+        #     peru-build \
+        #     R -e 'source("scripts/forecasting/historical_bayes.R")'
 
         # Forecasting
         docker run --rm --platform linux/amd64 \
@@ -219,7 +236,8 @@ rule model_sarima:
 rule model_tcn:
     input: "data/processed/province/.done"
     output: touch("data/models/tcn/.done")
-    params: max_workers=MAX_WORKERS
+    params:
+        retrain_models=RETRAIN_MODELS,
     shell:
         """
         docker build --platform linux/amd64 -t peru-build .
@@ -229,7 +247,7 @@ rule model_tcn:
             -v {WORKDIR}/scripts:/app/scripts:ro \
             -v {WORKDIR}/workflows:/app/workflows:ro \
             -v {WORKDIR}/data:/app/data \
-            -e MAX_WORKERS="{params.max_workers}" \
+            -e RETRAIN_MODELS="{params.retrain_models}" \
             peru-build \
             python scripts/forecasting/forecast_tcn.py
         """
@@ -255,7 +273,11 @@ rule model_timegpt:
             python scripts/forecasting/forecast_timegpt.py
         """
 
-rule model_python:
+# =========================
+# Ensemble Rules
+# =========================
+
+rule python_collate:
     input:
         "data/models/sarima/.done",
         "data/models/tcn/.done",
@@ -274,10 +296,6 @@ rule model_python:
             peru-build \
             R -e 'source("scripts/forecasting/python_collate.R")'
         """
-
-# =========================
-# Ensemble Rules
-# =========================
 
 rule ensemble_log_cases:
     input:

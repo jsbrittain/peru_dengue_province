@@ -4,10 +4,13 @@ library(ggplot2)
 library(data.table)
 library(scoringutils)
 
-peru.province.base.dir <- file.path(getwd(), "data")
-peru.province.python.out.dir <- file.path(peru.province.base.dir, "python/output")
-peru.province.python.data.dir <- file.path(peru.province.base.dir, "python/data")
-peru.province.predictions.out.dir <- file.path(getwd(), "predictions")
+library(forcats)
+library(lubridate)
+
+province.base.dir <- file.path(getwd(), "data")
+province.python.out.dir <- file.path(province.base.dir, "python/output")
+province.python.data.dir <- file.path(province.base.dir, "python/data")
+province.predictions.out.dir <- file.path(getwd(), "predictions")
 
 process_quantile_predictions <- function(models_dt) {
   results_dt <- models_dt[which(quantile == 0.5),
@@ -23,12 +26,40 @@ process_quantile_predictions <- function(models_dt) {
 
 quantiles <- c(0.01, 0.025, seq(0.05, 0.95, 0.05), 0.975, 0.99)
 
+# --- Minimal required dataset -------------------------------------------------
+
+# Load data
+logger::log_info("Load data")
+df <- data.table(
+  read.csv(file.path(province.python.data.dir, "ptl_province_inla_df.csv"))
+)
+
+# --- Derive required metrics --------------------------------------------------
+
+# Derive TIME, an index of month-year (1-140)
+df <- df %>%
+  mutate(date = as.Date(paste(YEAR, MONTH, 1, sep = "-")))
+date_lookup <- df %>%
+  select(date) %>%
+  distinct() %>%
+  arrange(date) %>%
+  mutate(TIME = row_number())
+df <- df %>%
+  left_join(date_lookup, by = "date")
+
+df <- df %>%
+  mutate(
+    POP_OFFSET = POP / 1e5,
+    LOG_CASES := log1p(CASES)
+  )
+
+# Revert to data frame and rename for processing
+ptl_province_inla_df <- data.table(df)
+
+# ------------------------------------------------------------------------------
+
 # data
-log_info("load data")
-ptl_province_inla_df <- data.table(read.csv(file.path(
-  peru.province.python.data.dir,
-  "ptl_province_inla_df.csv"
-)))
+log_info("Subset data")
 ptl_province_2018_2021_data <- subset(ptl_province_inla_df, YEAR >= 2018)
 ptl_province_2018_2021_data[, IND := seq(1, length(DIR)), by = "PROVINCE"]
 
@@ -40,7 +71,7 @@ process_python_deep_preds <- function(model_name) {
   ovr_preds_dt <- NULL
   for (i in 0:(length(province_names) - 1)) {
     prov_in_q <- province_names[i + 1]
-    tmp <- data.table(read.csv(file.path(peru.province.python.out.dir, paste0(
+    tmp <- data.table(read.csv(file.path(province.python.out.dir, paste0(
       model_name,
       "_dataframe_", i, ".csv"
     ))))
@@ -60,9 +91,9 @@ ptl_province_2010_2018_data[, IND := seq(1, length(DIR)), by = "PROVINCE"]
 ptl_province_2010_2018_data <- ptl_province_2010_2018_data[which(IND > (max(IND)) -
   82)]
 ptl_province_2010_2018_data[, IND := seq(1, length(DIR)), by = "PROVINCE"] # New Index to match forecast data.table
-raw_historical_sarima_preds_dt[, IND := rep(seq(1, length(unique(ptl_province_2010_2018_data$TIME))),
-  each = 1
-), by = "PROVINCE"]
+raw_historical_sarima_preds_dt[,
+  IND := rep(seq(1, length(unique(ptl_province_2010_2018_data$TIME))), each = 1),
+  by = "PROVINCE"]
 head(raw_historical_sarima_preds_dt)
 
 raw_historical_sarima_preds_dt$X <- NULL
@@ -104,17 +135,17 @@ quantile_historical_sarima_preds_dt[which(quantile == 0.5), caret::R2(
 ), by = "location"]
 
 saveRDS(quantile_historical_sarima_preds_dt, file = file.path(
-  peru.province.python.out.dir,
+  province.python.out.dir,
   "quantile_historical_sarima_preds_dt.RDS"
 ))
 log_info("Saving sarima samples historical")
 dir.create(file.path(
-  peru.province.predictions.out.dir,
+  province.predictions.out.dir,
   "sarima"
 ), recursive = TRUE, showWarnings = FALSE)
 write.csv(quantile_historical_sarima_preds_dt,
   file.path(
-    peru.province.predictions.out.dir,
+    province.predictions.out.dir,
     "sarima", "pred_log_cases_quantiles_historical.csv"
   ),
   row.names = FALSE
@@ -143,7 +174,7 @@ process_quantile_predictions(quantile_historical_sarima_dir_preds_dt)
 
 # DIR
 saveRDS(quantile_historical_sarima_dir_preds_dt, file = file.path(
-  peru.province.python.out.dir,
+  province.python.out.dir,
   "quantile_historical_sarima_dir_preds_dt.RDS"
 ))
 
@@ -233,23 +264,23 @@ quantile_historical_fine_tuned_timegpt_preds_dt %>%
   plot_interval_coverage()
 
 saveRDS(quantile_historical_fine_tuned_timegpt_preds_dt, file = file.path(
-  peru.province.python.out.dir,
+  province.python.out.dir,
   "quantile_historical_fine_tuned_timegpt_preds_dt.RDS"
 ))
 log_info("Saving finetuned_timegpt quantiles historical")
 dir.create(file.path(
-  peru.province.predictions.out.dir,
+  province.predictions.out.dir,
   "finetuned_timegpt"
 ), recursive = TRUE, showWarnings = FALSE)
 write.csv(quantile_historical_fine_tuned_timegpt_preds_dt,
   file.path(
-    peru.province.predictions.out.dir,
+    province.predictions.out.dir,
     "finetuned_timegpt", "pred_log_cases_quantiles_historical.csv"
   ),
   row.names = FALSE
 )
 quantile_historical_fine_tuned_timegpt_preds_dt <- readRDS(file = file.path(
-  peru.province.python.out.dir,
+  province.python.out.dir,
   "quantile_historical_fine_tuned_timegpt_preds_dt.RDS"
 ))
 quantile_historical_fine_tuned_timegpt_dir_preds_dt <- copy(quantile_historical_fine_tuned_timegpt_preds_dt)
@@ -264,7 +295,7 @@ quantile_historical_fine_tuned_timegpt_dir_preds_dt[which(quantile == 0.5), care
 quantile_historical_fine_tuned_timegpt_dir_preds_dt
 # DIR
 saveRDS(quantile_historical_fine_tuned_timegpt_dir_preds_dt, file = file.path(
-  peru.province.python.out.dir,
+  province.python.out.dir,
   "quantile_historical_fine_tuned_timegpt_dir_preds_dt.RDS"
 ))
 ggplot(historical_fine_tuned_timegpt_preds_dt) +
@@ -383,23 +414,23 @@ quantile_historical_no_covars_fine_tuned_timegpt_preds_dt %>%
   plot_interval_coverage()
 
 saveRDS(quantile_historical_no_covars_fine_tuned_timegpt_preds_dt, file = file.path(
-  peru.province.python.out.dir,
+  province.python.out.dir,
   "quantile_historical_no_covars_fine_tuned_timegpt_preds_dt.RDS"
 ))
 log_info("Saving nocovars_finetuned_timegpt quantiles historical")
 dir.create(file.path(
-  peru.province.predictions.out.dir,
+  province.predictions.out.dir,
   "nocovars_finetuned_timegpt"
 ), recursive = TRUE, showWarnings = FALSE)
 write.csv(quantile_historical_no_covars_fine_tuned_timegpt_preds_dt,
   file.path(
-    peru.province.predictions.out.dir,
+    province.predictions.out.dir,
     "nocovars_finetuned_timegpt", "pred_log_cases_quantiles_historical.csv"
   ),
   row.names = FALSE
 )
 quantile_historical_no_covars_fine_tuned_timegpt_preds_dt <- readRDS(file = file.path(
-  peru.province.python.out.dir,
+  province.python.out.dir,
   "quantile_historical_no_covars_fine_tuned_timegpt_preds_dt.RDS"
 ))
 quantile_historical_no_covars_fine_tuned_timegpt_dir_preds_dt <- copy(quantile_historical_no_covars_fine_tuned_timegpt_preds_dt)
@@ -416,7 +447,7 @@ quantile_historical_no_covars_fine_tuned_timegpt_dir_preds_dt[
 
 # DIR
 saveRDS(quantile_historical_no_covars_fine_tuned_timegpt_dir_preds_dt, file = file.path(
-  peru.province.python.out.dir,
+  province.python.out.dir,
   "quantile_historical_no_covars_fine_tuned_timegpt_dir_preds_dt.RDS"
 ))
 ggplot(historical_no_covars_fine_tuned_timegpt_preds_dt) +
@@ -463,7 +494,7 @@ ptl_province_2010_2018_data <- subset(ptl_province_inla_df, YEAR < 2018)
 ptl_province_2010_2018_data[, IND := seq(1, length(DIR)), by = "PROVINCE"]
 # Only have 42 data points in historical data.table
 ptl_province_2010_2018_data <- ptl_province_2010_2018_data[which(IND > (max(IND)) -
-  43)]
+  44)]
 ptl_province_2010_2018_data[, IND := seq(1, length(DIR)), by = "PROVINCE"] # New Index to match forecast data.table
 raw_historical_tcn_preds_dt[, IND := rep(seq(1, length(unique(ptl_province_2010_2018_data$TIME))), each = 1), by = "PROVINCE"]
 head(raw_historical_tcn_preds_dt)
@@ -514,17 +545,17 @@ quantile_historical_tcn_preds_dt %>%
   summarise_scores(by = "model")
 
 saveRDS(quantile_historical_tcn_preds_dt, file = file.path(
-  peru.province.python.out.dir,
+  province.python.out.dir,
   "quantile_historical_tcn_preds_dt.RDS"
 ))
 log_info("Saving tcn quantiles historical")
 dir.create(file.path(
-  peru.province.predictions.out.dir,
+  province.predictions.out.dir,
   "tcn"
 ), recursive = TRUE, showWarnings = FALSE)
 write.csv(quantile_historical_tcn_preds_dt,
   file.path(
-    peru.province.predictions.out.dir,
+    province.predictions.out.dir,
     "tcn", "pred_log_cases_quantiles_historical.csv"
   ),
   row.names = FALSE
@@ -555,7 +586,7 @@ quantile_historical_tcn_dir_preds_dt %>%
   summarise_scores(by = "model")
 # DIR
 saveRDS(quantile_historical_tcn_dir_preds_dt, file = file.path(
-  peru.province.python.out.dir,
+  province.python.out.dir,
   "quantile_historical_tcn_dir_preds_dt.RDS"
 ))
 
@@ -627,17 +658,17 @@ quantile_finetuned_no_covars_timegpt_preds_dt[, model := "finetuned_no_covars_ti
 quantile_finetuned_no_covars_timegpt_preds_dt
 
 saveRDS(quantile_finetuned_no_covars_timegpt_preds_dt, file = file.path(
-  peru.province.python.out.dir,
+  province.python.out.dir,
   "quantile_finetuned_no_covars_timegpt_preds_dt.RDS"
 ))
 log_info("Saving nocovars_finetuned_timegpt quantiles forecasting")
 dir.create(file.path(
-  peru.province.predictions.out.dir,
+  province.predictions.out.dir,
   "nocovars_finetuned_timegpt"
 ), recursive = TRUE, showWarnings = FALSE)
 write.csv(quantile_finetuned_no_covars_timegpt_preds_dt,
   file.path(
-    peru.province.predictions.out.dir,
+    province.predictions.out.dir,
     "nocovars_finetuned_timegpt", "pred_log_cases_quantiles_forecasting.csv"
   ),
   row.names = FALSE
@@ -658,7 +689,7 @@ quantile_fine_tuned_no_covars_timegpt_dir_preds_dt[which(quantile == 0.5), caret
 )]
 # DIR
 saveRDS(quantile_fine_tuned_no_covars_timegpt_dir_preds_dt, file = file.path(
-  peru.province.python.out.dir,
+  province.python.out.dir,
   "quantile_fine_tuned_no_covars_timegpt_dir_preds_dt.RDS"
 ))
 
@@ -735,23 +766,23 @@ quantile_fine_tuned_timegpt_preds_dt %>%
   plot_interval_coverage()
 
 saveRDS(quantile_fine_tuned_timegpt_preds_dt, file = file.path(
-  peru.province.python.out.dir,
+  province.python.out.dir,
   "quantile_fine_tuned_timegpt_preds_dt.RDS"
 ))
 log_info("Saving finetuned_timegpt quantiles forecasting")
 dir.create(file.path(
-  peru.province.predictions.out.dir,
+  province.predictions.out.dir,
   "finetuned_timegpt"
 ), recursive = TRUE, showWarnings = FALSE)
 write.csv(quantile_fine_tuned_timegpt_preds_dt,
   file.path(
-    peru.province.predictions.out.dir,
+    province.predictions.out.dir,
     "finetuned_timegpt", "pred_log_cases_quantiles_forecasting.csv"
   ),
   row.names = FALSE
 )
 quantile_fine_tuned_timegpt_preds_dt <- readRDS(file = file.path(
-  peru.province.python.out.dir,
+  province.python.out.dir,
   "quantile_fine_tuned_timegpt_preds_dt.RDS"
 ))
 quantile_fine_tuned_timegpt_dir_preds_dt <- copy(quantile_fine_tuned_timegpt_preds_dt)
@@ -766,7 +797,7 @@ quantile_fine_tuned_timegpt_dir_preds_dt[which(quantile == 0.5), caret::R2(
 
 # DIR
 saveRDS(quantile_fine_tuned_timegpt_dir_preds_dt, file = file.path(
-  peru.province.python.out.dir,
+  province.python.out.dir,
   "quantile_fine_tuned_timegpt_dir_preds_dt.RDS"
 ))
 
@@ -821,15 +852,15 @@ quantile_tcn_preds_dt %>%
   summarise_scores(by = c("model", "range")) %>%
   plot_interval_coverage()
 
-saveRDS(quantile_tcn_preds_dt, file = file.path(peru.province.python.out.dir, "quantile_tcn_preds_dt.RDS"))
+saveRDS(quantile_tcn_preds_dt, file = file.path(province.python.out.dir, "quantile_tcn_preds_dt.RDS"))
 log_info("Saving tcn quantiles forecasting")
 dir.create(file.path(
-  peru.province.predictions.out.dir,
+  province.predictions.out.dir,
   "tcn"
 ), recursive = TRUE, showWarnings = FALSE)
 write.csv(quantile_tcn_preds_dt,
   file.path(
-    peru.province.predictions.out.dir,
+    province.predictions.out.dir,
     "tcn", "pred_log_cases_quantiles_forecasting.csv"
   ),
   row.names = FALSE
@@ -846,7 +877,7 @@ setnames(dir_tcn_preds_dt_for_scoring, "DIR_prediction", "prediction")
 setnames(dir_tcn_preds_dt_for_scoring, "end_of_month", "target_end_date")
 # DIR
 saveRDS(dir_tcn_preds_dt_for_scoring, file = file.path(
-  peru.province.python.out.dir,
+  province.python.out.dir,
   "dir_tcn_preds_dt_for_scoring.RDS"
 ))
 dir_tcn_preds_dt_for_scoring
@@ -862,7 +893,7 @@ quantile_tcn_dir_preds_dt <- sample_to_quantile(dir_tcn_preds_dt_for_scoring, qu
 quantile_tcn_dir_preds_dt[which(quantile == 0.5), caret::R2(true_value, prediction)]
 # DIR
 saveRDS(quantile_tcn_dir_preds_dt, file = file.path(
-  peru.province.python.out.dir,
+  province.python.out.dir,
   "quantile_tcn_dir_preds_dt.RDS"
 ))
 
@@ -984,17 +1015,17 @@ quantile_sarima_preds_dt %>%
   summarise_scores(by = c("model"))
 quantile_sarima_preds_dt
 saveRDS(quantile_sarima_preds_dt, file = file.path(
-  peru.province.python.out.dir,
+  province.python.out.dir,
   "quantile_sarima_preds_dt.RDS"
 ))
 log_info("Saving sarima quantiles forecasting")
 dir.create(file.path(
-  peru.province.predictions.out.dir,
+  province.predictions.out.dir,
   "sarima"
 ), recursive = TRUE, showWarnings = FALSE)
 write.csv(quantile_sarima_preds_dt,
   file.path(
-    peru.province.predictions.out.dir,
+    province.predictions.out.dir,
     "sarima", "pred_log_cases_quantiles_forecasting.csv"
   ),
   row.names = FALSE
@@ -1011,7 +1042,7 @@ setnames(dir_sarima_preds_dt_for_scoring, "DIR_prediction", "prediction")
 setnames(dir_sarima_preds_dt_for_scoring, "end_of_month", "target_end_date")
 # DIR
 saveRDS(dir_sarima_preds_dt_for_scoring, file = file.path(
-  peru.province.python.out.dir,
+  province.python.out.dir,
   "dir_sarima_preds_dt_for_scoring.RDS"
 ))
 sarima_scores_dir_2018_2021_dt <- dir_sarima_preds_dt_for_scoring %>%
@@ -1024,7 +1055,7 @@ quantile_sarima_dir_preds_dt[which(prediction < 0), prediction := 0]
 quantile_sarima_dir_preds_dt[which(quantile == 0.5), caret::R2(prediction, true_value)]
 # DIR
 saveRDS(quantile_sarima_dir_preds_dt, file = file.path(
-  peru.province.python.out.dir,
+  province.python.out.dir,
   "quantile_sarima_dir_preds_dt.RDS"
 ))
 
