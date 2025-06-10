@@ -7,15 +7,30 @@ To perform the ensemble analysis presented in the paper requires three steps:
 1. [Preprocessing](#preprocessing)
 1. [Forecasting](#forecasting)
 
-## Data download
+## Running the pipeline
 
-### Collated data
+To run the pipeline you will need a container service such as docker, as-well as a modern version of snakemake installed. The pipeline is automated with snakemake, which calls docker for the processing steps. Ensure the following files are provided before you run the pipeline:
 
-Raw collated case data are available as a pre-downloaded and collated archive provided in [compressed_data.csv.gz](processing/compressed_data.csv.gz), with province-level population data provided in [province_pop.xlsx](processing/province_pop.xlsx). This is a useful starting point to familiarise yourself with the workflow. If you wish to download more recent data then follow the instructions below.
+| File | Description |
+| - | - |
+| `data/cases/2010_2021_cases_full_data.csv` | Dengue line-list case data (2010-2021) |
+| `data/shapefiles/province_pop.csv` | Population estimates per province (1993, 2007, 2017, 2022) |
+| `data/shapefiles/census_data.xlsx` | Census data (2010) |
+| `data/shapefiles/2007_census_data.xls` | Census data (2007) |
 
-### Manual download
+All other data sources (listed below) are downloaded and processed automatically.
 
-To collate the data manually you will need to access data from the following public repositories.
+To run the pipeline, use snakemake and specify the desired target. For example, to run the full pipeline, you can use:
+
+```bash
+snakemake --cores 1 --snakefile workflows/Snakefile all
+```
+
+Here, `all` specifies the _all_ rule, which is used to run all steps in the pipeline. You can also specify individual targets, which can be found in the `workflows/Snakefile` file. There, you will also find a number of environment variables that can be set to control sub-processes. 
+
+## Data sources
+
+Additional data will be downloaded from the following sources:
 
 | Dataset | Author | URL |
 | - | - | - |
@@ -26,51 +41,3 @@ To collate the data manually you will need to access data from the following pub
 | Oceanic Niño Index (ONI) | [National Oceanic and Atmospheric Administration (NOAA)](https://origin.cpc.ncep.noaa.gov/) | https://www.cpc.ncep.noaa.gov/data/ ([direct link](https://www.cpc.ncep.noaa.gov/data/indices/oni.ascii.txt)) |
 | Indice Costero El Niño (ICEN) | [Geophysical Institute of Peru](http://met.igp.gob.pe) | http://met.igp.gob.pe/datos/ ([direct link](http://met.igp.gob.pe/datos/icen.txt)) |
 | Shape files | [Humanitarian Data Exchange](https://data.humdata.org/) | https://data.humdata.org/dataset/cod-ab-per ([direct link](https://data.humdata.org/dataset/54fc7f4d-f4c0-4892-91f6-2fe7c1ecf363/resource/63cc642a-2957-4f25-8a17-086c99d275e8/download/per_adm_ign_20200714_shp.zip))|
-
-## Preprocessing
-
-### Processed data
-
-Processed data are available as a pre-downloaded and collated archive provided in [ptl_province_inla_df.csv](processing/ptl_province_inla_df.csv). If you wish to process the data yourself then follow the instructions below.
-
-### Manual processing
-
-1. Download the relevant archives (listed above), or decompress the provided archive [compressed_data.csv.gz](processing/compressed_data.csv).
-1. Check the `DIRECTORIES` section of the script [processing/packages_directories.R](processing/packages_directories.R) and ensure that the appropriate directories are set for your system.
-1. Run the following scripts in order in the same R environment from the `processing` directory:
-   1. [packages_directories.R](processing/packages_directories.R)
-   1. [province_01.R](processing/province_01.R)
-   1. [province_02.R](processing/province_02.R)
-
-The output of the final step will be a dataset of province-level monthly cases across 2010-2011 inclusive, alongside the corresponding demographic and climate information. This is stored in the file `ptl_province_inla_df.csv`. Move this file to the `forecasting` directory to continue with the forecasting analysis.
-
-# Forecasting
-
-Forecasting will run several independent models before combining them into ensembles. The scripts take the processed data `ptl_province_inla_df.csv` from the previous step.
-
-First, load R with a fresh session and set the working directory to the `forecasting` directory. Run the script `forecasting_funcs.R` to load the necessary libraries and utility functions.
-
-Run each of the independent models:
-1. Baseline model:
-   - `province_baseline_forecaster.R`
-1. Bayesian model:
-   - `province_historical_bayesian_forecasting.R`
-   - `province_bayesian_forecasting.R`
-1. TCN, SARIMA and TimeGPT models are run through Python (converted Jupyter notebook):
-   - Preprocess the data from R: `province_python_setup.R`
-   - Run the Jupyter notebook: `python_peru_forecast.ipynb` (_Note that TimeGPT models require an API key (`TIMEGPT_KEY=xxx`) from https://www.nixtla.io/ that should be located within a `.env` file in the repository root)._
-   - Read the data back into R: `province_python_forecasting.R`
-
-The data can then be merged and the ensemble formed. The following scripts form the ensemble, score the model predictions, and produce visualisations for different variables:
-| Variable | Script |
-| - | - |
-| Log cases | `province_log_cases.R` |
-| Dengue incidence rate | `province_dir_ensemble_scoring.R` |
-
-## Running the pipeline
-
-To run the pipeline you will need a container service such as docker. Run the pipeline with `./run.sh`. This will build and launch the container. Before launching the pipeline make sure you have provided the following files (remaining datasets will be downloaded automatically):
-- `data/cases/2010_2021_cases_full_data.csv`
-- `data/province/province_pop.csv`
-- `data/province/census_data.xlsx`
-- `data/province/2007_census_data.xlsx`
